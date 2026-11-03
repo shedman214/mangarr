@@ -19,6 +19,10 @@ CONTENT_SOURCE_NAMES = (
 DISCOVERY_SOURCE_NAMES = (*CONTENT_SOURCE_NAMES, "viz", "wikipedia", "nyaa")
 
 DEFAULTS: dict[str, str] = {
+    "permissions_enabled": "false",
+    "permissions_folder_mode": "775",
+    "permissions_user": "99",
+    "permissions_group": "100",
     # Media management
     "naming_template": "{series} - Ch. {chapter:04.1f}",
     "naming_template_no_volume": "{series} - Ch. {chapter:04.1f}",
@@ -117,6 +121,8 @@ def validate(values: dict[str, str]) -> None:
     interval would abort scheduler startup. Raises ValueError."""
     from .library.naming import chapter_filename
     from urllib.parse import urlsplit
+    from .permissions import parse
+    parse(values)
 
     for key in ("naming_template", "naming_template_no_volume"):
         if key not in values:
@@ -200,6 +206,8 @@ async def get_all(session: AsyncSession) -> dict[str, str]:
     # the new per-source switch has been explicitly saved.
     if "source_mangafire_discovery_proxy_enabled" not in stored:
         values["source_mangafire_discovery_proxy_enabled"] = values["mangafire_discovery_proxy_enabled"]
+    from .permissions import configure
+    configure(values)
     return values
 
 

@@ -21,7 +21,7 @@ from .api import (
 )
 from .api.deps import get_api_key, require_api_key
 from .config import config
-from .db import init_db
+from .db import init_db, session_scope
 from .jobs import scheduler
 
 logging.basicConfig(
@@ -34,6 +34,9 @@ log = logging.getLogger("mangarr")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    from . import settings_service
+    async with session_scope() as session:
+        await settings_service.get_all(session)
     await scheduler.start()
     log.info("Mangarr %s ready on %s:%d", __version__, config.host, config.port)
     yield

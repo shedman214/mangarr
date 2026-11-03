@@ -143,6 +143,39 @@ Set `PUID` and `PGID` together; `UMASK` also works on its own. On unRAID,
 `UMASK=002` keeps new files group-writable. Leave them unset and nothing
 changes.
 
+### Permissions in Settings
+
+Settings → Permissions adds optional chmod/chown controls for files and
+folders Mangarr creates. It starts off, leaving PUID/PGID/UMASK behavior
+unchanged. The defaults when enabled are folder `775`, file `664`, UID `99`,
+and GID `100`. File modes omit execute bits. Blank owner/group fields keep
+the current owner/group; names must exist inside the container.
+
+New downloads, merged CBZs, copied imports, and newly created directories use
+the selected settings. Existing directories and files adopted from disk are
+not changed automatically. Hardlinked imports retain their permissions,
+since changing a hardlink would also change its seeding file.
+
+**Preview permissions** checks only tracked, Mangarr-created CBZ files under
+registered library roots. A repair requires saved, enabled settings and an
+explicit confirmation of its preview. Symlinks, shared hardlinks, and files
+changed since preview are skipped. Repairs write an undo journal under
+`/config/logs/permissions`; **Undo this repair** restores recorded modes and
+ownership only while the file's identity and permission state still match.
+Preview does not modify library permissions, and existing folders are never
+included in repairs. Mangarr must own a file or have sufficient privileges
+to change its permissions or owner.
+
+### Test Toonily search and downloads
+
+Settings → Sources → **Test Toonily download** checks a non-adult sample:
+Solo Leveling chapter 1. It searches the site, lists chapters, downloads the
+whole chapter, and validates the resulting CBZ. The sample goes into a unique
+folder under `/config/source-tests/toonily`, separate from the library. The
+result reports the chapter/page counts, archive size, ownership, and mode.
+Save proxy settings before running the test. The test does not enable
+Toonily globally or queue other downloads.
+
 On start, Mangarr makes its data directory (`/config`) owned by `PUID:PGID`
 automatically. It never changes your library or download folders, so when
 switching an existing install from root, give the new user those once, e.g.

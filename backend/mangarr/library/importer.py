@@ -14,6 +14,7 @@ from tempfile import NamedTemporaryFile
 from pathlib import Path
 
 from ..models import Chapter, Series
+from ..permissions import apply_created, mkdir_created
 from ..util import NEW_FILE_MODE, natural_key
 from .matcher import (
     ARCHIVE_EXTS,
@@ -59,6 +60,7 @@ def _atomic_destination(dest: Path, keep_mode: bool = False):
         yield temporary
         if not keep_mode:
             temporary.chmod(NEW_FILE_MODE)
+        apply_created(temporary)
         temporary.replace(dest)
     finally:
         temporary.unlink(missing_ok=True)
@@ -227,7 +229,7 @@ def import_torrent_payload(
             if path.suffix.lower() in ARCHIVE_EXTS | IMAGE_EXTS and not path.exists():
                 raise FileNotFoundError(f"torrent file missing: {path}")
     folder = library_root / (series.folder_name or series_folder(series.title))
-    folder.mkdir(parents=True, exist_ok=True)
+    mkdir_created(folder)
     imported: list[tuple[Path, Chapter | None, int | None]] = []
     media = find_media_files(content_path, only)
     _preflight_numbering(media)

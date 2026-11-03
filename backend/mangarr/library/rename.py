@@ -7,6 +7,7 @@ import logging
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from ..permissions import mkdir_created
 
 from ..models import Chapter, Series
 from ..util import has_chapter_marker, parse_volume_number
@@ -129,7 +130,7 @@ def apply_renames(items: list[RenameItem], chapter_by_id: dict[int, Chapter]) ->
             outcomes.append(RenameOutcome(item, "skipped-collision", str(dst)))
             continue
         try:
-            dst.parent.mkdir(parents=True, exist_ok=True)
+            mkdir_created(dst.parent)
             shutil.move(str(src), str(dst))
         except OSError as exc:
             outcomes.append(RenameOutcome(item, "error", str(exc)))

@@ -13,6 +13,7 @@ from tempfile import NamedTemporaryFile
 
 from ..download.cbz import build_comicinfo
 from ..util import NEW_FILE_MODE, natural_key
+from ..permissions import apply_created, mkdir_created
 from .matcher import IMAGE_EXTS
 
 log = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ def merge_chapter_archives(
     if dest.exists():
         raise FileExistsError(f"volume archive already exists: {dest}")
     ordered = sorted(chapter_files, key=lambda item: item[0])
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    mkdir_created(dest.parent)
     with NamedTemporaryFile(
         dir=dest.parent, prefix=".mangarr-", suffix=".partial", delete=False
     ) as handle:
@@ -68,6 +69,7 @@ def merge_chapter_archives(
         # not the temp file's 0600 — set once written, in case the umask
         # leaves no owner write
         temporary.chmod(NEW_FILE_MODE)
+        apply_created(temporary)
         temporary.replace(dest)
     finally:
         temporary.unlink(missing_ok=True)

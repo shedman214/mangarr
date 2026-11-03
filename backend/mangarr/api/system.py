@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .. import __version__
 from ..db import get_session
 from ..models import Chapter, Download, DownloadStatus, RootFolder, Series
+from ..permissions import mkdir_created
 from ..schemas import RootFolderIn, RootFolderOut, SystemStatus, WantedItemOut
 
 router = APIRouter(tags=["system"])
@@ -99,7 +100,7 @@ async def list_root_folders(session: AsyncSession = Depends(get_session)):
 async def add_root_folder(body: RootFolderIn, session: AsyncSession = Depends(get_session)):
     path = Path(body.path).expanduser()
     try:
-        path.mkdir(parents=True, exist_ok=True)
+        mkdir_created(path)
     except OSError as exc:
         raise HTTPException(400, f"Cannot create folder: {exc}") from exc
     folder = RootFolder(path=str(path))

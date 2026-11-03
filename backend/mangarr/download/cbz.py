@@ -3,6 +3,7 @@ Komga and Kavita)."""
 
 import re
 import zipfile
+from ..permissions import apply_created, mkdir_created
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
 from xml.dom import minidom
@@ -66,7 +67,7 @@ def build_comicinfo(
 
 def write_cbz(dest: Path, pages: list[bytes], comicinfo_xml: str) -> Path:
     """Writes ordered page images + ComicInfo.xml into a .cbz at dest."""
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    mkdir_created(dest.parent)
     tmp = dest.with_suffix(".cbz.partial")
     width = max(3, len(str(len(pages))))
     try:
@@ -74,6 +75,7 @@ def write_cbz(dest: Path, pages: list[bytes], comicinfo_xml: str) -> Path:
             zf.writestr("ComicInfo.xml", comicinfo_xml)
             for i, data in enumerate(pages, start=1):
                 zf.writestr(f"{i:0{width}d}{guess_extension(data)}", data)
+        apply_created(tmp)
         tmp.rename(dest)
     finally:
         # a failed write (e.g. a full disk) must not leave the partial archive

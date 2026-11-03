@@ -10,6 +10,7 @@ import type {
 import { FolderBrowser } from "../components/FolderBrowser";
 import { ErrorNotice, Spinner, Toggle, Toolbar } from "../components/common";
 import { SOURCE_LABELS } from "../sources";
+import { PermissionsSettings } from "../components/PermissionsSettings";
 
 function RootFolders() {
   const queryClient = useQueryClient();
@@ -59,6 +60,17 @@ function RootFolders() {
       </div>
     </div>
   );
+}
+
+function ToonilyTest() {
+  const test = useMutation({ mutationFn: () => api.post<{ chapters_found: number; pages_downloaded: number; archive_bytes: number; archive_path: string; mode: string; uid: number; gid: number }>("/settings/toonily/test") });
+  return <div style={{ marginTop: 18 }}>
+    <h4>Test Toonily</h4>
+    <p className="section-hint">Searches Solo Leveling, lists chapters, and downloads chapter 1 into a separate appdata test folder. Your library files are untouched. Save source and proxy settings before testing.</p>
+    <button className="btn" disabled={test.isPending} onClick={() => test.mutate()}>{test.isPending ? "Testing search and download…" : "Test Toonily download"}</button>
+    <ErrorNotice error={test.error} />
+    {test.data && <div role="status"><p>Passed: {test.data.chapters_found} chapters found; {test.data.pages_downloaded} images downloaded; archive verified ({(test.data.archive_bytes / 1048576).toFixed(1)} MiB).</p><p className="section-hint">{test.data.archive_path}<br />Permissions: {test.data.mode}, owner {test.data.uid}:{test.data.gid}</p></div>}
+  </div>;
 }
 
 function ApiKeyRow({ apiKey, onRemove }: { apiKey: ApiKey; onRemove: () => void }) {
@@ -607,6 +619,7 @@ export default function Settings() {
         <ErrorNotice error={loadError} retry={() => void retryLoad()} />
         <ErrorNotice error={save.error} />
         <RootFolders />
+        <PermissionsSettings form={form} setForm={setForm} dirty={dirty} />
         <ApiKeys />
 
         <div className="settings-section">
@@ -673,6 +686,7 @@ export default function Settings() {
             </p>
           </div>
           <SourcePriority form={form} setForm={setForm} />
+          <ToonilyTest />
           <p className="section-hint">
             Discovery routes a source's title searches, chapter lists, page manifests,
             metadata, and request-signing assets through the configured proxy. It also applies

@@ -1,7 +1,15 @@
+import asyncio
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import kavita, notifications, settings_service
+from .. import permissions
+from ..config import config
+from ..models import Chapter, RootFolder, Series
 from ..db import get_session
 from ..download.qbittorrent import QbtError, test_connection
 from ..schemas import (
@@ -15,6 +23,59 @@ from ..schemas import (
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 MASK = "••••••••"
+
+
+class PermissionAction(BaseModel):
+    id: str = Field(pattern=r"^[0-9a-f]{32}$")
+
+
+@router.post("/toonily/test")
+async def toonily_test(session: AsyncSession = Depends(get_session)):
+    from ..source_checks import check_toonily
+    try:
+        return await check_toonily(session)
+    except Exception as exc:
+        raise HTTPException(502, f"Toonily test failed: {exc}") from exc
+
+
+@router.get("/permissions/status")
+async def permission_status():
+    return {"supported": hasattr(os, "fchown"), "uid": os.getuid() if hasattr(os, "getuid") else None,
+            "gid": os.getgid() if hasattr(os, "getgid") else None}
+
+
+@router.post("/permissions/preview")
+async def permission_preview(session: AsyncSession = Depends(get_session)):
+    await settings_service.get_all(session)
+    candidates = (await session.execute(
+        select(Chapter.file_path, RootFolder.path).join(Series, Chapter.series_id == Series.id)
+        .join(RootFolder, Series.root_folder_id == RootFolder.id)
+        .where(Chapter.downloaded == True, Chapter.excluded == False, Chapter.file_source != "", Chapter.file_path != "")
+        .distinct().limit(50001)
+    )).all()
+    if len(candidates) > 50000:
+        raise HTTPException(422, "Permission preview is limited to 50,000 managed files per run.")
+    try:
+        return await asyncio.to_thread(permissions.preview, [(p, r) for p, r in candidates], config.data_dir)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/permissions/fix")
+async def permission_fix(body: PermissionAction, session: AsyncSession = Depends(get_session)):
+    await settings_service.get_all(session)
+    try:
+        return await asyncio.to_thread(permissions.repair, config.data_dir, body.id)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/permissions/undo")
+async def permission_undo(body: PermissionAction):
+    try:
+        return await asyncio.to_thread(permissions.repair, config.data_dir, body.id, undo=True)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("")
