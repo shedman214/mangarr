@@ -51,10 +51,8 @@ async def permission_preview(session: AsyncSession = Depends(get_session)):
         select(Chapter.file_path, RootFolder.path).join(Series, Chapter.series_id == Series.id)
         .join(RootFolder, Series.root_folder_id == RootFolder.id)
         .where(Chapter.downloaded == True, Chapter.excluded == False, Chapter.file_source != "", Chapter.file_path != "")
-        .distinct().limit(50001)
+        .distinct()
     )).all()
-    if len(candidates) > 50000:
-        raise HTTPException(422, "Permission preview is limited to 50,000 managed files per run.")
     try:
         return await asyncio.to_thread(permissions.preview, [(p, r) for p, r in candidates], config.data_dir)
     except (OSError, ValueError) as exc:
