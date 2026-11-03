@@ -4,6 +4,10 @@
 
 # mangarr
 
+> This is a fork of [KiranTheRam/mangarr](https://github.com/KiranTheRam/mangarr) with additional sources,
+> source diagnostics, permission tools and backups. Report issues for this fork at
+> <https://github.com/shedman214/mangarr/issues>.
+
 Radarr/Sonarr-style automation for manga. Monitor series, automatically grab
 new chapters from direct sources or torrents, and organize everything as CBZ
 files with `ComicInfo.xml` — ready for [Komga](https://komga.org) or
@@ -87,8 +91,12 @@ git clone <this repo> mangarr && cd mangarr
 docker compose up -d
 ```
 
-The default Compose file runs the published `kirantheram/mangarr:latest`
-Docker Hub image and stores configuration and media under `./data`. Open
+The default Compose file runs this fork's image,
+`ghcr.io/shedman214/mangarr:test`, and stores configuration and media under
+`./data`. The image is published by this repository's GitHub Actions only after
+the backend tests and the frontend build pass; each build is also tagged
+`sha-<commit>` if you want to pin an exact version. Unraid users can add
+`templates/mangarr.xml` from this repository, which uses the same image. Open
 <http://localhost:6996> after it starts.
 The image's healthcheck polls `GET /ping` (no API key needed), so
 `docker ps` shows the container as `healthy` once Mangarr is serving.

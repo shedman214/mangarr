@@ -1,6 +1,7 @@
 services:
   mangarr:
-    image: kirantheram/mangarr:latest
+    # This fork's image; :test is published only after the backend tests and frontend build pass.
+    image: ghcr.io/shedman214/mangarr:test
     container_name: mangarr
     ports:
       - "6996:6996"

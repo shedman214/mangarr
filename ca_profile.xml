@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CommunityApplications>
-  <Profile>Mangarr automates manga library management, chapter downloads, and CBZ organization for readers such as Komga and Kavita. For installation help and bug reports, use the project's GitHub issues.</Profile>
-  <Icon>https://raw.githubusercontent.com/KiranTheRam/mangarr/main/frontend/public/mangarr-icon.png</Icon>
-  <WebPage>https://github.com/KiranTheRam/mangarr</WebPage>
+  <Profile>Mangarr automates manga library management, chapter downloads, and CBZ organization for readers such as Komga and Kavita. This is a fork of KiranTheRam/mangarr; for installation help and bug reports, use this fork's GitHub issues.</Profile>
+  <Icon>https://raw.githubusercontent.com/shedman214/mangarr/main/frontend/public/mangarr-icon.png</Icon>
+  <WebPage>https://github.com/shedman214/mangarr</WebPage>
 </CommunityApplications>
