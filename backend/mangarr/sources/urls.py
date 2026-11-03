@@ -8,6 +8,9 @@ from .base import SourceSeries
 
 # These paths mirror the public URLs and identifiers emitted by each adapter.
 _ROUTES = {
+    "toomics.com": ("toomics", r"/en/webtoon/episode/toon/([0-9]+)"),
+    "mangakatana.com": ("mangakatana", r"/manga/([A-Za-z0-9_-]+\.[0-9]+)"),
+    "manganato.gg": ("manganato", r"/manga/([A-Za-z0-9_-]+)"),
     "toonily.com": ("toonily", r"/serie/([A-Za-z0-9_-]+)"),
     "mangafire.to": ("mangafire", r"/title/([A-Za-z0-9]+)(?:-([A-Za-z0-9-]+))?"),
     "mangadex.org": ("mangadex", r"/title/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})(?:/[^/]+)?"),

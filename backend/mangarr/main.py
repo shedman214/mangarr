@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .api import (
+    backups,
     apikeys,
     calendar,
     import_lists,
@@ -33,6 +34,9 @@ log = logging.getLogger("mangarr")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+    from .backups import restore_pending
+    await asyncio.to_thread(restore_pending, config.data_dir)
     await init_db()
     from . import settings_service
     async with session_scope() as session:
@@ -54,6 +58,7 @@ api.include_router(import_lists.router)
 api.include_router(search.router)
 api.include_router(queue.router)
 api.include_router(settings.router)
+api.include_router(backups.router)
 api.include_router(apikeys.router)
 api.include_router(system.router)
 app.mount("/api/v1", api)

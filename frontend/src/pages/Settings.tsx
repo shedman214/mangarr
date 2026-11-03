@@ -12,6 +12,7 @@ import { ErrorNotice, Spinner, Toggle, Toolbar } from "../components/common";
 import { SOURCE_LABELS } from "../sources";
 import { PermissionsSettings } from "../components/PermissionsSettings";
 import { SourceStatus } from "../components/SourceStatus";
+import { BackupSettings } from "../components/BackupSettings";
 
 function RootFolders() {
   const queryClient = useQueryClient();
@@ -173,6 +174,9 @@ function ApiKeys() {
 }
 
 const SOURCE_HINTS: Record<string, string> = {
+  toomics: "Experimental English source. Free episodes only; uses your own session’s Family Safe setting.",
+  mangakatana: "Experimental archive source; supports series links and decimal chapters.",
+  manganato: "Experimental Manganato.gg source; loads all chapter-list pages.",
   toonily: "Experimental manhwa source. Image downloads send the chapter page as Referer; availability depends on your network.",
   mangaplus: "Official same-day Shonen Jump. Needs a residential IP — bans datacenters.",
   webtoons: "Official WEBTOON Originals. Only episodes that are currently free (no coins) are listed.",
@@ -193,6 +197,9 @@ const CONTENT_SOURCES = new Set([
   "tcbscans",
   "asura",
   "toonily",
+  "mangakatana",
+  "manganato",
+  "toomics",
 ]);
 
 function orderedSourceNames(form: SettingsType): string[] {
@@ -620,6 +627,7 @@ export default function Settings() {
         <ErrorNotice error={loadError} retry={() => void retryLoad()} />
         <ErrorNotice error={save.error} />
         <RootFolders />
+        <BackupSettings />
         <PermissionsSettings form={form} setForm={setForm} dirty={dirty} />
         <ApiKeys />
 
@@ -688,6 +696,11 @@ export default function Settings() {
           </div>
           <SourcePriority form={form} setForm={setForm} />
           <SourceDownloadTest source="toonily" label="Toonily" />
+          <div style={{ marginTop: 18 }}>
+            <h4>Toomics session</h4>
+            <p className="section-hint">Optional Cookie header from your own Toomics session. To use Family Safe off, complete Toomics’ age check and turn it off on their website first. Mangarr uses that session setting; it does not unlock VIP or coin episodes. Keep this value private.</p>
+            <div className="form-row"><label htmlFor="toomics-cookie">Session cookie</label><input id="toomics-cookie" type="password" autoComplete="off" value={form.toomics_session_cookie || ""} onChange={e => setForm({ ...form, toomics_session_cookie: e.target.value })} /></div>
+          </div>
           <SourceDownloadTest source="mangafire" label="MangaFire" />
           <SourceStatus />
           <p className="section-hint">

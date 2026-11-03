@@ -7,6 +7,9 @@ from .. import settings_service
 from .base import DirectSource, TorrentIndexer
 from .asura import source as asura_source
 from .toonily import source as toonily_source
+from .mangakatana import source as mangakatana_source
+from .manganato import source as manganato_source
+from .toomics import source as toomics_source
 from .atsumaru import source as atsumaru_source
 from .mangadex import source as mangadex_source
 from .mangafire import source as mangafire_source
@@ -28,6 +31,9 @@ DIRECT_SOURCES: dict[str, DirectSource] = {
     tcbscans_source.name: tcbscans_source,
     asura_source.name: asura_source,
     toonily_source.name: toonily_source,
+    mangakatana_source.name: mangakatana_source,
+    manganato_source.name: manganato_source,
+    toomics_source.name: toomics_source,
     viz_source.name: viz_source,
     wikipedia_source.name: wikipedia_source,
 }
@@ -40,6 +46,7 @@ ALL_SOURCE_NAMES = [*DIRECT_SOURCES, *TORRENT_INDEXERS]
 async def apply_settings(session: AsyncSession) -> dict[str, str]:
     """Push runtime settings into source instances; returns the settings dict."""
     values = await settings_service.get_all(session)
+    toomics_source.configure(session_cookie=values.get("toomics_session_cookie", ""))
     mangadex_source.configure(
         client_id=values["mangadex_client_id"],
         client_secret=values["mangadex_client_secret"],

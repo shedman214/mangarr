@@ -302,7 +302,7 @@ def repair(data_dir: Path, token: str, *, undo: bool = False, progress=None) -> 
             finally:
                 processed += 1
                 if progress:
-                    progress({"total": total, "processed": processed, "changed": changed, "skipped": skipped, "error_count": error_count, "undo_id": journal_id})
+                    progress({"total": total, "processed": processed, "changed": changed, "skipped": skipped, "error_count": error_count, "errors": list(errors), "undo_id": journal_id})
         return {"changed": changed, "skipped": skipped, "errors": errors[:50], "error_count": error_count, "undo_id": journal_id if journal_path.exists() else None}
     finally:
         _repair_lock.release()

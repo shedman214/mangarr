@@ -45,6 +45,19 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
+  backupDownload: async (id: string) => {
+    const resp = await fetch(`/api/v1/settings/backups/${id}`, { headers: { "X-Api-Key": apiKey } });
+    if (!resp.ok) throw new Error("Backup download failed");
+    return resp.blob();
+  },
+  restoreUpload: async (file: File) => {
+    const resp = await fetch("/api/v1/settings/backups/restore", { method: "POST", headers: { "X-Api-Key": apiKey, "Content-Type": "application/zip" }, body: file });
+    if (!resp.ok) {
+      const data = await resp.json();
+      throw new Error(data.detail || "Restore validation failed");
+    }
+    return resp.json();
+  },
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),

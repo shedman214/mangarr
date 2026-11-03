@@ -5,7 +5,7 @@ import type { Settings } from "../api/types";
 import { ErrorNotice, Toggle } from "./common";
 
 type Preview = { preview_id: string; count: number; skipped: number; examples: { path: string; before: number[]; after: number[] }[] };
-type Job = { id: string; operation: string; state: string; phase: string; processed: number; total: number | null; listed?: number; changed: number; skipped: number; error?: string; undo_id?: string; result?: Preview & Result };
+type Job = { id: string; operation: string; state: string; phase: string; processed: number; total: number | null; listed?: number; changed: number; skipped: number; error_count?: number; errors?: { path: string; error: string }[]; error?: string; undo_id?: string; result?: Preview & Result };
 
 type Result = { changed: number; skipped: number; error_count: number; errors: { path: string; error: string }[]; undo_id: string | null };
 
@@ -79,6 +79,8 @@ export function PermissionsSettings({ form, setForm, dirty }: { form: Settings; 
       <p>{job.phase}: {job.processed.toLocaleString()}{job.total != null ? ` / ${job.total.toLocaleString()} files` : " files"}. {job.changed.toLocaleString()} need changes or changed; {job.skipped.toLocaleString()} skipped.{job.phase === "Listing library" && <> {job.listed?.toLocaleString() || 0} paths listed.</>}</p>
       {job.state === "running" && <><progress value={job.total ? job.processed : undefined} max={job.total || undefined} /><p className="section-hint">This runs in the background. You can leave Settings and return to view progress.</p></>}
       {job.error && <p className="error-banner">{job.error}</p>}
+      {job.operation !== "preview" && <p>{(job.error_count || 0).toLocaleString()} errors.</p>}
+      {job.state === "running" && job.errors && job.errors.length > 0 && <details><summary>First {job.errors.length} errors</summary>{job.errors.map((e) => <p key={e.path} className="error-banner">{e.path}: {e.error}</p>)}</details>}
       {(job.state === "interrupted" || job.state === "failed") && job.undo_id && <button className="btn" disabled={busy} onClick={() => { setResult({ changed: job.changed, skipped: job.skipped, error_count: 0, errors: [], undo_id: job.undo_id! }); }}>Show undo for partial repair</button>}
     </div>}
     {preview && !busy && <div role="status" style={{ marginTop: 12 }}>

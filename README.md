@@ -385,3 +385,48 @@ summaries omit request URLs, credentials, and response bodies.
   source/metadata plugin interfaces are already in place.
 - Discord notifications, and notifications on grab (a webhook on import
   already exists — see Features).
+# Backup and restore
+
+Settings includes **Backup and restore**. Download backup takes an online SQLite
+snapshot, including committed WAL changes, without stopping downloads. The ZIP
+contains the database and the installation bootstrap key. Settings, source links,
+library records, history, queue state, and database API keys are included. Media,
+logs, permission undo journals, container environment variables, and Docker mounts
+are excluded. Backups contain credentials: keep them private. A server copy is
+retained under `/config/backups`; retention is manual for now.
+
+To restore, upload a Mangarr backup ZIP from the same application version and
+confirm replacement. Mangarr checks entries, size limits, checksum, database
+integrity, and schema compatibility before scheduling it. Restore is blocked while
+a permission operation is running. You can cancel a scheduled restore in Settings.
+Finish active work before restarting the container: restore runs before database
+initialization and background jobs on the next startup. A safety backup is created
+first, and restored archives are retained in `/config/backups`. The installation's
+current bootstrap key stays unchanged; database API keys and queue records come
+from the backup. Keep the same library mounts. No media files are restored or
+deleted. Automatic pre-migration backups are not yet implemented.
+
+
+## Additional experimental sources
+
+MangaKatana, Manganato.gg, and English Toomics are opt-in sources in Settings.
+Each has separate discovery and content proxy controls and accepts manual series
+links. Existing source priorities and proxy settings are preserved.
+
+- MangaKatana: title search, chapter lists including decimals, ordered reader
+  images, and chapter-specific image Referer. A local live Red Blue check found
+  213 chapters, 36 chapter-one pages, and downloaded the first image successfully.
+- Manganato.gg: paginated chapter API (no 50-chapter cutoff), decimal chapter
+  numbers, title search, and reader images. Live Red Blue chapter lookup found
+  215 entries including decimals. Search and CDN download returned HTTP 403 from
+  the test network; this source is experimental and not verified end to end.
+- Toomics: English series links, search parser, explicit free episodes only, and
+  reader images. VIP/coin episodes are excluded. An optional masked session-cookie
+  setting uses the user's existing Toomics session. To use Family Safe off,
+  complete age verification and disable it on the Toomics website first. Mangarr
+  does not bypass verification or paid access. HTTP requests returned 404 from the
+  test network despite working browser pages; live search/download remain unverified.
+  Never paste session cookies into issues or logs.
+
+These adapters have local parser/routing tests. Unraid network verification is
+still required before treating the experimental sources as fully working.

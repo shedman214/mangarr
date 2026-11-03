@@ -15,6 +15,9 @@ CONTENT_SOURCE_NAMES = (
     "tcbscans",
     "asura",
     "toonily",
+    "mangakatana",
+    "manganato",
+    "toomics",
 )
 DISCOVERY_SOURCE_NAMES = (*CONTENT_SOURCE_NAMES, "viz", "wikipedia", "nyaa")
 
@@ -66,6 +69,10 @@ DEFAULTS: dict[str, str] = {
     "source_asura_enabled": "true",
     # Experimental until verified from the user's server/network.
     "source_toonily_enabled": "false",
+    "source_mangakatana_enabled": "false",
+    "source_manganato_enabled": "false",
+    "source_toomics_enabled": "false",
+    "toomics_session_cookie": "",
     # MangaPlus needs a residential IP (bans datacenters); off until the user
     # confirms it reaches the API from their host
     "source_mangaplus_enabled": "false",
@@ -110,6 +117,7 @@ DEFAULTS: dict[str, str] = {
 }
 
 SECRET_KEYS = {
+    "toomics_session_cookie",
     "mangadex_client_secret", "mangadex_password", "qbittorrent_password",
     "webhook_secret", "kavita_api_key",
 }
@@ -123,6 +131,9 @@ def validate(values: dict[str, str]) -> None:
     from urllib.parse import urlsplit
     from .permissions import parse
     parse(values)
+    cookie = values.get("toomics_session_cookie", "")
+    if "\r" in cookie or "\n" in cookie or len(cookie) > 16384:
+        raise ValueError("Invalid Toomics session cookie")
 
     for key in ("naming_template", "naming_template_no_volume"):
         if key not in values:

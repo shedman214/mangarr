@@ -470,14 +470,15 @@ export function RenameModal({
         <>
           <p className="section-hint">
             {outcomes.filter((o) => o.status === "renamed").length} renamed,{" "}
-            {outcomes.filter((o) => o.status !== "renamed").length} skipped.
+            {outcomes.filter((o) => o.status.startsWith("skipped-")).length} skipped,{" "}
+            {outcomes.filter((o) => o.status === "error").length} failed.
           </p>
           <table className="data-table">
             <tbody>
               {outcomes.map((o, i) => (
                 <tr key={i}>
                   <td>{o.status === "renamed" ? "✓" : "⚠"}</td>
-                  <td>{o.new_name}</td>
+                  <td>{o.new_name}{o.detail && <div className="error-banner" style={{ marginTop: 6, overflowWrap: "anywhere" }}>{o.detail}{o.status === "error" && /permission denied/i.test(o.detail) && <div>Mangarr needs write access to the containing folder to rename this file. Changing only the file permissions may not be enough.</div>}</div>}</td>
                   <td style={{ color: "var(--text-faint)" }}>
                     {o.status !== "renamed" ? o.status.replace("skipped-", "") : ""}
                   </td>
