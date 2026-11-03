@@ -122,6 +122,8 @@ export function SourcesModal({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SourceCandidate[] | null>(null);
   const [resyncMsg, setResyncMsg] = useState("");
+  const isLink = /^(?:https?:\/\/|\/\/|(?:www\.)?[^\s/]+\.[a-z]{2,}\/)/i.test(query.trim());
+  const canSearch = Boolean(query.trim() && (source || isLink));
 
   const { data: sources } = useQuery({
     queryKey: ["sources"],
@@ -133,6 +135,7 @@ export function SourcesModal({
     onSuccess: invalidate,
   });
   const search = useMutation({
+    onMutate: () => setResults(null),
     mutationFn: () =>
       api.get<SourceCandidate[]>(
         `/series/${seriesId}/sources/search?source_name=${source}&query=${encodeURIComponent(query)}`,
@@ -169,7 +172,8 @@ export function SourcesModal({
     <Modal title="Edit sources" onClose={onClose}>
       <p className="section-hint">
         Current links. Remove a wrong one, then search the correct source below and pick the
-        right entry. After fixing links, re-sync to rebuild the chapter list.
+        right entry. You can also paste a series website link; its source is detected
+        automatically. After fixing links, re-sync to rebuild the chapter list.
       </p>
       <table className="data-table">
         <tbody>
@@ -193,30 +197,37 @@ export function SourcesModal({
 
       <h4 className="files-heading">Add / fix a source</h4>
       <div className="form-row">
-        <select value={source} onChange={(e) => setSource(e.target.value)}>
+        <select value={source} disabled={search.isPending} onChange={(e) => { setSource(e.target.value); setResults(null); search.reset(); }}>
           <option value="">Source…</option>
           {sources?.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <input
-          placeholder="Search title…"
+          placeholder="Search title or paste series link…"
+          aria-label="Search title or series website link"
+          disabled={search.isPending}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && source && query && search.mutate()}
+          onChange={(e) => { setQuery(e.target.value); setResults(null); search.reset(); }}
+          onKeyDown={(e) => e.key === "Enter" && canSearch && !search.isPending && search.mutate()}
           style={{ flex: 1 }}
         />
-        <button className="btn" disabled={!source || !query || search.isPending}
+        <button className="btn" disabled={!canSearch || search.isPending}
           onClick={() => search.mutate()}>
           Search
         </button>
       </div>
       {search.isError && <div className="error-banner">{(search.error as Error).message}</div>}
+      {results && isLink && <p className="section-hint">Recognized series link. Confirm the source and URL below, then choose Use. Chapters are fetched when you re-sync.</p>}
       {results && (
         <table className="data-table">
           <tbody>
             {results.length === 0 && <tr><td className="muted">No matches.</td></tr>}
             {results.map((c) => (
               <tr key={c.external_id}>
-                <td>{c.title}</td>
+                <td>
+                  {c.title}
+                  <div className="muted">{c.source_name}</div>
+                  {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer">{c.url}</a>}
+                </td>
                 <td style={{ width: 70 }}>
                   <button className="btn sm primary" onClick={() => setLink.mutate(c)}>
                     Use

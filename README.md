@@ -45,6 +45,14 @@ design; it is the automation half of your manga stack.
     uploads are AVIF images, which Kavita and Komga read natively.
   - **Asura Scans** (API) — Korean/Chinese webtoons and manhwa (not Japanese
     manga). Skips locked early-access (premium) chapters automatically.
+  - **Toonily** (experimental scraper, off by default) — title search,
+    chapter lists, and chapter images. Enable it under Settings → Sources.
+    Each image request carries its own chapter page as the Referer, including
+    when several chapters download concurrently. Access may vary by network;
+    HTTP 403 responses are reported as failures. Live downloads still need
+    verification from a reachable host. No browser or cookies are required
+    by the adapter. Separate side-story URL routes are not yet mapped to
+    main-series chapter numbers.
   - **Nyaa.si** (torrents) — Literature/English-translated category, sent to
     qBittorrent; completed downloads are imported automatically (volume packs,
     chapter archives, or loose-image folders). Imports **hardlink** by
@@ -196,6 +204,14 @@ it won't re-download what's on disk.
    - **Change folder** — browse the filesystem to point a series at its folder,
      including a subfolder for collections (e.g. `Attack On Titan/Attack On
      Titan`).
+   - **Edit sources** — search by title with a selected source, or paste a
+     series website link to detect its source automatically. Review the
+     recognized source and URL, select **Use**, then **Re-sync chapters from
+     links**. A recognized URL is a link candidate; chapter availability is
+     checked during sync. Links work for all current direct-source adapters,
+     including MangaFire and Toonily. Chapter and search-page links are
+     rejected where a series link is required. Enable the source in Settings
+     before syncing.
 
 Matching is filename-based and handles the usual variety: `Series - Ch. 12.cbz`,
 `Series ch. 12`, `Volume 03.cbr`, `Series v03 (2019).cbz`, whole-volume archives

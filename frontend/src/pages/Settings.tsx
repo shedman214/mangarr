@@ -160,6 +160,7 @@ function ApiKeys() {
 }
 
 const SOURCE_HINTS: Record<string, string> = {
+  toonily: "Experimental manhwa source. Image downloads send the chapter page as Referer; availability depends on your network.",
   mangaplus: "Official same-day Shonen Jump. Needs a residential IP — bans datacenters.",
   webtoons: "Official WEBTOON Originals. Only episodes that are currently free (no coins) are listed.",
   mangafire: "Broad English archive coverage, including many bonus and decimal chapters.",
@@ -178,6 +179,7 @@ const CONTENT_SOURCES = new Set([
   "atsumaru",
   "tcbscans",
   "asura",
+  "toonily",
 ]);
 
 function orderedSourceNames(form: SettingsType): string[] {

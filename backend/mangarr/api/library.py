@@ -54,6 +54,7 @@ from ..schemas import (
     VolumeResyncPreviewOut,
 )
 from ..sources import registry
+from ..sources.urls import series_from_url
 
 router = APIRouter(tags=["library"])
 
@@ -439,6 +440,15 @@ async def source_search(
     session: AsyncSession = Depends(get_session),
 ):
     await _load(session, series_id)  # 404 if series missing
+    try:
+        linked = series_from_url(query)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if linked is not None:
+        return [SourceCandidateOut(
+            source_name=linked.source_name, external_id=linked.external_id,
+            title=linked.title, url=linked.url, alt_titles=[],
+        )]
     values = await registry.apply_settings(session)  # noqa: F841 (configures sources)
     src = registry.DIRECT_SOURCES.get(source_name)
     if src is None:

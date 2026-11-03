@@ -1,0 +1,81 @@
+name: Build and publish test image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    uses: ./.github/workflows/tests.yml
+
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Image tags
+        id: tags
+        shell: bash
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "pinned=$image:sha-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+      - name: Build test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: |
+            ${{ steps.tags.outputs.image }}:test
+            ${{ steps.tags.outputs.pinned }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Mangarr fork test build with source URL linking and experimental Toonily support
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test container
+        shell: bash
+        run: |
+          docker run --detach --name mangarr-smoke --publish 127.0.0.1:6996:6996 "${{ steps.tags.outputs.pinned }}"
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:6996/ping; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != true ]; then
+            docker logs mangarr-smoke
+            exit 1
+          fi
+          curl --fail --silent http://127.0.0.1:6996/ | grep -q '<html'
+          docker exec mangarr-smoke python -c 'from mangarr.sources.registry import DIRECT_SOURCES; assert "toonily" in DIRECT_SOURCES'
+          docker stop mangarr-smoke
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish verified test image
+        run: |
+          docker push "${{ steps.tags.outputs.pinned }}"
+          docker push "${{ steps.tags.outputs.image }}:test"
+          echo 'Test image: `${{ steps.tags.outputs.pinned }}`' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Moving tag: `${{ steps.tags.outputs.image }}:test`' >> "$GITHUB_STEP_SUMMARY"
