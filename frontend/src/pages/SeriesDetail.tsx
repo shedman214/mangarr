@@ -59,10 +59,11 @@ function InteractiveSearch({
     if (!includeTorrents) q.set("include_torrents", "false");
     return q.toString();
   }, [seriesId, chapterIds, includeTorrents]);
-  const { data, isLoading, isError, error } = useQuery({
+  const { data: searchResult, isLoading, isError, error } = useQuery({
     queryKey: ["releases", params],
-    queryFn: () => api.get<Release[]>(`/search/releases?${params}`),
+    queryFn: () => api.get<{ releases: Release[]; warnings: string[] }>(`/search/releases?${params}&diagnostics=true`),
   });
+  const data = searchResult?.releases;
   // only a single-chapter search can imply the target chapter; for anything
   // wider the API tags every direct result with its own chapter_id
   const soleChapterId = chapterIds?.length === 1 ? chapterIds[0] : undefined;
@@ -167,13 +168,14 @@ function InteractiveSearch({
 
   return (
     <Modal title={`Search — ${title}`} onClose={onClose}>
+      {searchResult?.warnings.map((warning) => <div key={warning} className="error-banner">{warning}</div>)}
       {isLoading ? (
         <Spinner />
       ) : isError ? (
         <div className="error-banner">{(error as Error).message}</div>
       ) : !data || data.length === 0 ? (
         <p style={{ color: "var(--text-dim)" }}>
-          No releases found. Check source links and that sources are enabled in Settings.
+          {searchResult?.warnings.length ? "No releases returned. Some source checks failed; see the errors above." : "No matching downloadable releases found. Check the saved source links, language, and enabled sources. Use Edit sources → Check chapters for details."}
         </p>
       ) : (
         <>

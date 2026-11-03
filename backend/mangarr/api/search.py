@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from pydantic import BaseModel
 
 from ..automation import select_for_series
 from ..db import get_session
@@ -22,6 +23,11 @@ from ..util import normalize_title
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/search", tags=["search"])
+
+
+class ReleaseSearchResult(BaseModel):
+    releases: list[ReleaseOut]
+    warnings: list[str]
 
 DIRECT_SEARCH_CONCURRENCY = 4
 TORRENT_SEARCH_CONCURRENCY = 2
@@ -92,6 +98,7 @@ def _candidate_matches_series(candidate_titles: list[str], wanted: set[str]) -> 
 async def _find_direct_source_ids(
     src: DirectSource,
     queries: list[str],
+    warnings: list[str] | None = None,
 ) -> list[tuple[str, str, str]]:
     wanted = {n for title in queries if (n := normalize_title(title))}
     matches: list[tuple[str, str, str]] = []
@@ -104,6 +111,10 @@ async def _find_direct_source_ids(
         except Exception as exc:
             # logged so a blocked source is told apart from "no results"
             log.warning("source %s search failed for %r: %r", src.name, query, exc)
+            from ..source_status import failure
+            message = failure(src.name, exc)
+            if warnings is not None:
+                warnings.append(f"{src.name}: {message}")
             return matches
         for cand in candidates:
             if cand.external_id in seen:
@@ -124,12 +135,13 @@ async def _find_direct_source_ids(
     return matches
 
 
-@router.get("/releases", response_model=list[ReleaseOut])
+@router.get("/releases", response_model=list[ReleaseOut] | ReleaseSearchResult)
 async def search_releases(
     series_id: int | None = None,
     chapter_id: Annotated[list[int], Query()] = [],  # noqa: B006 — FastAPI copies it
     include_torrents: bool = True,
     session: AsyncSession = Depends(get_session),
+    diagnostics: bool = False,
 ):
     """Interactive search across direct sources and torrent indexers.
 
@@ -173,6 +185,7 @@ async def search_releases(
 
     values = await registry.apply_settings(session)
     releases: list[ReleaseOut] = []
+    warnings: list[str] = []
     links = {sl.source_name: sl for sl in series.source_links}
     alt_titles = split_alt_titles(series.alt_titles)
     queries = title_queries(series.title, alt_titles)
@@ -185,14 +198,18 @@ async def search_releases(
         source_ids = (
             [(link.external_id, link.external_title, link.external_url)]
             if link is not None
-            else await _find_direct_source_ids(src, queries)
+            else await _find_direct_source_ids(src, queries, warnings)
         )
         for external_id, _title, _url in source_ids:
             try:
                 source_chapters = await src.list_chapters(external_id)
             except Exception as exc:
                 log.warning("chapter list failed on %s for %r: %r", src.name, external_id, exc)
+                from ..source_status import failure
+                warnings.append(f"{src.name}: {failure(src.name, exc)}")
                 continue
+            from ..source_status import success
+            success(src.name, len(source_chapters))
             if selected is None:
                 # the open-ended search shows the release a grab would take;
                 # a scoped one lists every group's copy to choose from
@@ -254,6 +271,8 @@ async def search_releases(
                     torrents = await indexer.search(query)
                 except Exception as exc:
                     log.warning("indexer %s search failed for %r: %r", indexer.name, query, exc)
+                    from ..source_status import failure
+                    warnings.append(f"{indexer.name}: {failure(indexer.name, exc)}")
                     continue
                 for t in torrents[:25]:
                     key = t.magnet or t.url or t.title
@@ -281,4 +300,6 @@ async def search_releases(
         )
         for part in torrent_parts:
             releases.extend(part)
+    if diagnostics:
+        return ReleaseSearchResult(releases=releases, warnings=sorted(set(warnings)))
     return releases

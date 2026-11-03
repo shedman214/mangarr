@@ -128,3 +128,14 @@ async def test_torrent_selection_logs_a_failing_indexer(caplog):
     records = _warnings(caplog, "blocked-tracker")
     assert records, "the failed indexer search was not logged"
     assert all("403" in r.getMessage() for r in records)
+
+async def test_release_search_diagnostics_returns_each_source_failure(db_session, blocked_sources):
+    series = await _series(db_session)
+    result = await search.search_releases(series_id=series.id, session=db_session, diagnostics=True)
+    assert result.releases == []
+    assert result.warnings == [
+        'blocked-tracker: Source returned HTTP 403.',
+        'linked-src: Source returned HTTP 403.',
+        'lookup-src: Source returned HTTP 403.',
+    ]
+    assert 'https://' not in str(result.warnings)
