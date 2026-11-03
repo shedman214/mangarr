@@ -67,6 +67,8 @@ def _token_rejected(response: httpx.Response) -> bool:
 class MangaFireSource(DirectSource):
     name = "mangafire"
     image_limiter = _image_limiter
+    discovery_proxy_enabled = False
+    discovery_proxy_url = ""
 
     def __init__(
         self,
@@ -97,10 +99,25 @@ class MangaFireSource(DirectSource):
         return response.json()
 
     async def _signed_get(self, path: str, params: dict | None) -> httpx.Response:
+        # Snapshot routing per call. A separate short-lived client avoids
+        # closing or reconfiguring a client another chapter is still using.
+        if self.discovery_proxy_enabled:
+            if not self.discovery_proxy_url:
+                raise RuntimeError("MangaFire discovery proxy is enabled but has no URL")
+            async with httpx.AsyncClient(
+                proxy=self.discovery_proxy_url, headers=self._client.headers,
+                timeout=60, trust_env=False, follow_redirects=True,
+            ) as client:
+                return await self._signed_get_with_client(client, path, params)
+        return await self._signed_get_with_client(self._client, path, params)
+
+    async def _signed_get_with_client(
+        self, client: httpx.AsyncClient, path: str, params: dict | None,
+    ) -> httpx.Response:
         query = dict(params or {})
-        query["vrf"] = await self._signer.sign(self._client, path, params)
+        query["vrf"] = await self._signer.sign(client, path, params)
         return await rl_request(
-            self._client, "GET", f"{API_URL}{path}", limiter=_limiter, params=query
+            client, "GET", f"{API_URL}{path}", limiter=_limiter, params=query
         )
 
     def image_headers(self) -> dict:

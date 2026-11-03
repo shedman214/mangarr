@@ -510,7 +510,7 @@ async def resync_chapters(series_id: int, session: AsyncSession = Depends(get_se
     being rebuilt."""
     from sqlalchemy import delete as sa_delete, func, or_
 
-    from ..jobs.tasks import acquire_series_lock, update_chapters
+    from ..jobs.tasks import acquire_series_lock, update_chapters, _source_retry_at
     from ..models import Download, DownloadStatus, HistoryEvent
 
     lock = await acquire_series_lock(series_id)
@@ -543,6 +543,26 @@ async def resync_chapters(series_id: int, session: AsyncSession = Depends(get_se
             if ch.excluded or ch.title_locked or ch.volume_locked
         }
         values = await registry.apply_settings(session)
+        # Validate linked content sources BEFORE deleting any library state.
+        # Manual resync probes once even during a background cooldown, so the
+        # caller sees the real error rather than a misleading zero-row success.
+        chapter_cache = {}
+        for link in series.source_links:
+            if link.source_name not in settings_service.CONTENT_SOURCE_NAMES:
+                continue
+            name = link.source_name
+            if values.get(f"source_{name}_enabled") != "true":
+                raise HTTPException(422, f"Enable {name} in Settings before re-syncing its link. Existing chapters were kept.")
+            src = registry.DIRECT_SOURCES[name]
+            try:
+                chapters = await src.list_chapters(link.external_id)
+            except Exception as exc:
+                raise HTTPException(502, f"{name} chapter lookup failed: {exc}. Existing chapters were kept.") from exc
+            if not chapters:
+                raise HTTPException(422, f"{name} returned no chapters for this series link. Check the link and source availability. Existing chapters were kept.")
+            chapter_cache[(name, link.external_id)] = chapters
+        for name, _ in chapter_cache:
+            _source_retry_at.pop(name, None)
         await session.execute(sa_delete(Download).where(
             Download.series_id == series_id,
             or_(Download.chapter_id.isnot(None), Download.status.notin_(active)),
@@ -552,8 +572,14 @@ async def resync_chapters(series_id: int, session: AsyncSession = Depends(get_se
             await session.delete(ch)
         await session.commit()
 
+        # expire_on_commit=False otherwise leaves deleted chapter objects in
+        # the loaded relationship, making the rebuilt count and lookups stale.
+        session.expire(series, ["chapters"])
         series = await _load(session, series_id)
-        await update_chapters(session, series, values)
+        if chapter_cache:
+            await update_chapters(session, series, values, chapter_cache)
+        else:
+            await update_chapters(session, series, values)
         # a locked chapter no source re-lists (e.g. a manually mapped extra)
         # must survive the rebuild — recreate it rather than dropping the
         # very metadata the lock promised to keep

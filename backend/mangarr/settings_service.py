@@ -72,6 +72,8 @@ DEFAULTS: dict[str, str] = {
     # Optional HTTP(S) proxy used only for chapter page/image bytes. Source
     # discovery, metadata, authentication, and page manifests stay direct.
     "download_proxy_url": "",
+    # Explicit opt-in: includes title search, chapter lists, and signing assets.
+    "mangafire_discovery_proxy_enabled": "false",
     **{f"source_{name}_proxy_enabled": "false" for name in CONTENT_SOURCE_NAMES},
     # Jobs
     "monitor_interval_minutes": "60",
@@ -173,9 +175,9 @@ def validate(values: dict[str, str]) -> None:
         and values.get(f"source_{name}_proxy_enabled") == "true"
         for name in CONTENT_SOURCE_NAMES
     )
-    if proxy_enabled and not values.get("download_proxy_url"):
+    if (proxy_enabled or values.get("mangafire_discovery_proxy_enabled") == "true") and not values.get("download_proxy_url"):
         raise ValueError(
-            "download_proxy_url is required when a source content proxy is enabled"
+            "download_proxy_url is required when a source content or discovery proxy is enabled"
         )
 
     from .kavita import validate_settings as validate_kavita

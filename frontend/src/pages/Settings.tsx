@@ -298,7 +298,8 @@ function ProxySettings({
       <h3>Proxy</h3>
       <p className="section-hint">
         Optionally route chapter page and image downloads through one HTTP proxy. Discovery,
-        metadata, authentication, and page manifests always connect directly.
+        metadata, authentication, and page manifests connect directly unless you enable
+        the separate MangaFire discovery proxy option under Sources.
       </p>
       <div className="form-row">
         <label>Proxy address</label>
@@ -657,11 +658,25 @@ export default function Settings() {
             </div>
             <p className="section-hint">
               Proxy applies only to chapter page/image downloads for checked sources. Discovery,
-              metadata, authentication, and page manifests remain direct. Checked sources fail
+              metadata, authentication, and page manifests remain direct unless you enable
+              MangaFire discovery below. Checked sources fail
               closed instead of retrying directly when the proxy is unavailable.
             </p>
           </div>
           <SourcePriority form={form} setForm={setForm} />
+          <div className="form-row" style={{ marginTop: 16 }}>
+            <label>MangaFire discovery proxy</label>
+            <Toggle
+              on={form.mangafire_discovery_proxy_enabled === "true"}
+              label="Use proxy for MangaFire search and chapter discovery"
+              onChange={(on) => setForm({ ...form, mangafire_discovery_proxy_enabled: on ? "true" : "false" })}
+            />
+          </div>
+          <p className="section-hint">
+            Use the configured proxy for MangaFire title searches, chapter lists, page manifests,
+            and request-signing assets. Enable this if direct MangaFire requests return 403.
+            Proxy failures are reported without retrying directly.
+          </p>
         </div>
 
         <ProxySettings form={form} setForm={setForm} set={set} />
