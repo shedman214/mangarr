@@ -160,7 +160,7 @@ def test_large_preview_streams_all_results_with_bounded_examples(tmp_path, monke
     sample.write_bytes(b'archive')
     sample.chmod(0o600)
     fd = os.open(sample, os.O_RDONLY)
-    monkeypatch.setattr(p, '_open_managed', lambda *args, **kwargs: os.dup(fd))
+    monkeypatch.setattr(p._PreviewStats, 'stat', lambda *args, **kwargs: os.fstat(fd))
     progress = []
     try:
         result = p.preview(((str(tmp_path / f'{n}.cbz'), str(tmp_path)) for n in range(50002)),
@@ -188,3 +188,27 @@ def test_legacy_preview_remains_repairable(tmp_path):
     record['entries'] = [json.loads(line) for line in manifest.with_suffix('.jsonl').read_text().splitlines()]
     manifest.write_text(json.dumps(record))
     assert p.repair(tmp_path / 'config', result['preview_id'])['changed'] == 1
+
+@linux
+def test_preview_folder_cache_never_follows_a_replacement_symlink(tmp_path):
+    root = tmp_path / 'root'
+    folder = root / 'series'
+    folder.mkdir(parents=True)
+    original = folder / 'chapter.cbz'
+    original.write_bytes(b'original')
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    target = outside / 'chapter.cbz'
+    target.write_bytes(b'unrelated')
+    expected = original.stat().st_ino
+    cache = p._PreviewStats()
+    try:
+        assert cache.stat(original, root).st_ino == expected
+        folder.rename(root / 'moved')
+        folder.symlink_to(outside, target_is_directory=True)
+        assert cache.stat(original, root).st_ino == expected
+        with pytest.raises(OSError):
+            p._open_managed(original, root)
+    finally:
+        cache.close()
+    assert cache.folders == {}

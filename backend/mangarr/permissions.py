@@ -9,6 +9,8 @@ import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass
+from collections import OrderedDict
+from contextlib import closing
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -155,6 +157,47 @@ def _store_path(data_dir: Path, token: str, kind: str) -> Path:
     return folder / f"{kind}-{token}.{'jsonl' if kind == 'undo' else 'json'}"
 
 
+class _PreviewStats:
+    """Read metadata without opening every media file or rewalking its folder.
+
+    Pinned directory descriptors never follow replacement symlinks. This is
+    preview-only; repairs still reopen and validate every path and identity.
+    """
+    def __init__(self):
+        self.folders = OrderedDict()
+
+    def close(self):
+        for fd in self.folders.values():
+            os.close(fd)
+        self.folders.clear()
+
+    def stat(self, path: Path, root: Path):
+        relative = path.absolute().relative_to(root)
+        if not relative.parts or any(part in {".", ".."} for part in relative.parts):
+            raise ValueError("Expected a media file inside its root")
+        key = (str(root), relative.parts[:-1])
+        fd = self.folders.get(key)
+        if fd is None:
+            fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                for part in relative.parts[:-1]:
+                    child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                    os.close(fd)
+                    fd = child
+                self.folders[key] = fd
+            except BaseException:
+                os.close(fd)
+                raise
+            if len(self.folders) > 128:
+                os.close(self.folders.popitem(last=False)[1])
+        else:
+            self.folders.move_to_end(key)
+        info = os.stat(relative.name, dir_fd=fd, follow_symlinks=False)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError("Skipped a symlink, shared hardlink, or non-file")
+        return info
+
+
 def preview(candidates, data_dir: Path, *, progress=None, policy=None) -> dict:
     policy = policy or _policy
     if not hasattr(os, "fchown"):
@@ -163,19 +206,16 @@ def preview(candidates, data_dir: Path, *, progress=None, policy=None) -> dict:
     manifest = _store_path(data_dir, token, "preview")
     count, skipped, scanned, examples = 0, 0, 0, []
     roots: dict[str, Path] = {}
+    stats = _PreviewStats()
     # Stream mismatches to disk; only the first 50 are sent to the browser.
-    with manifest.with_suffix(".jsonl").open("w", encoding="utf-8") as output:
+    with manifest.with_suffix(".jsonl").open("w", encoding="utf-8") as output, closing(stats):
         for path, root in candidates:
             try:
                 if Path(path).suffix.lower() != ".cbz":
                     continue
                 if root not in roots:
                     roots[root] = Path(root).resolve(strict=True)
-                fd = _open_managed(Path(path), Path(root), resolved_root=roots[root])
-                try:
-                    info = os.fstat(fd)
-                finally:
-                    os.close(fd)
+                info = stats.stat(Path(path), roots[root])
                 before = [stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid]
                 desired = [policy.file_mode, policy.uid if policy.uid >= 0 else info.st_uid, policy.gid if policy.gid >= 0 else info.st_gid]
                 if before != desired:
