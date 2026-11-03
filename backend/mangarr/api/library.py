@@ -481,6 +481,38 @@ async def set_source_link(
     return link
 
 
+@router.post("/series/{series_id}/sources/{link_id}/check")
+async def check_source_link(series_id: int, link_id: int, session: AsyncSession = Depends(get_session)):
+    from .. import source_status
+    from ..jobs.tasks import _note_source_failure, _source_retry_at
+    link = await session.get(SeriesSourceLink, link_id)
+    if link is None or link.series_id != series_id:
+        raise HTTPException(404, "Source link not found")
+    values = await registry.apply_settings(session)
+    src = registry.DIRECT_SOURCES.get(link.source_name)
+    if src is None or link.source_name not in settings_service.CONTENT_SOURCE_NAMES:
+        return {"state": "metadata", "message": "This source provides metadata, not chapter downloads."}
+    if values.get(f"source_{src.name}_enabled") != "true":
+        return {"state": "disabled", "message": "Enable this source in Settings before checking it."}
+    try:
+        async with asyncio.timeout(90):
+            chapters = await src.list_chapters(link.external_id)
+            details = await src.chapter_diagnostics(link.external_id) if src.name == "mangadex" else {}
+        numbers = sorted({ch.number for ch in chapters})
+        source_status.success(src.name, len(numbers))
+        _source_retry_at.pop(src.name, None)
+        message = f"{len(numbers)} distinct downloadable chapters ({len(chapters)} releases)."
+        if details.get("external_releases"):
+            message += f" {details['external_releases']} external publisher releases are listed but cannot be downloaded by MangaDex."
+        if not chapters:
+            message += " No downloadable chapters in the configured language; existing library chapters were kept."
+        return {"state": "ok" if chapters else "empty", "message": message, "chapters": len(numbers),
+                "releases": len(chapters), "numbers": numbers, **details}
+    except Exception as exc:
+        _note_source_failure(src.name, exc)
+        return {"state": "error", "message": source_status.snapshot()[src.name]["error"]}
+
+
 @router.delete("/series/{series_id}/sources/{link_id}", status_code=204)
 async def delete_source_link(
     series_id: int, link_id: int, session: AsyncSession = Depends(get_session)

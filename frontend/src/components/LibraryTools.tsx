@@ -13,6 +13,7 @@ import type {
 } from "../api/types";
 import { ErrorNotice, Modal, Spinner, chapterLabel, formatBytes } from "./common";
 import { FolderBrowser } from "./FolderBrowser";
+import { SourceLinkCheck } from "./SourceStatus";
 
 /** Lists the folders a series spans (primary + extras) with add/remove and a
  *  way to change the primary. Supports libraries where a series is split
@@ -183,7 +184,7 @@ export function SourcesModal({
           {links.map((l) => (
             <tr key={l.id}>
               <td><span className="pill blue">{l.source_name}</span></td>
-              <td>{l.external_title || l.external_id}</td>
+              <td>{l.external_title || l.external_id}<SourceLinkCheck seriesId={seriesId} linkId={l.id} source={l.source_name} /></td>
               <td style={{ width: 40 }}>
                 <button className="btn sm" title="Remove" onClick={() => remove.mutate(l.id)}>
                   ✕

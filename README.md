@@ -346,6 +346,20 @@ legitimate.
 
 ## Roadmap
 
+### Checking source availability
+
+In a series' **Edit sources** dialog, **Check chapters** tests the exact
+saved link without rebuilding chapters, changing files, or queuing downloads.
+It reports distinct downloadable chapter numbers and release counts. MangaDex
+checks also report external publisher listings separately: those links are
+not MangaDex-hosted downloads. Checks use the saved source/proxy settings and
+configured language. A manual check probes immediately, even during cooldown.
+
+**Settings → Sources → Source status** shows the latest observations, last
+successful check, last failure, and next retry time. Observations reset when
+Mangarr restarts; an empty result is not reported as a network failure. Error
+summaries omit request URLs, credentials, and response bodies.
+
 - Western comics support (ComicVine metadata + GetComics source) — the
   source/metadata plugin interfaces are already in place.
 - Discord notifications, and notifications on grab (a webhook on import

@@ -296,6 +296,27 @@ class MangaDexSource(DirectSource):
         # stable: copies of one chapter keep their feed order
         return sorted(chapters, key=lambda c: c.number)
 
+    async def chapter_diagnostics(self, external_id: str) -> dict:
+        """Compare hosted downloads with external publisher listings, in the configured language."""
+        rows = []
+        offset = 0
+        while True:
+            data = await self._get(f"/manga/{external_id}/feed", params={
+                "limit": 500, "offset": offset, "translatedLanguage[]": [self._language],
+                "order[chapter]": "asc",
+                "contentRating[]": ["safe", "suggestive", "erotica"], "includeExternalUrl": 1,
+            })
+            page = data.get("data") or []
+            rows.extend(page)
+            offset += len(page)
+            if offset >= data.get("total", 0):
+                break
+            if not page:
+                raise ValueError("Incomplete MangaDex chapter feed")
+        external = [r for r in rows if (r.get("attributes") or {}).get("externalUrl")]
+        return {"language": self._language, "listed_releases": len(rows), "external_releases": len(external),
+                "hosted_releases": len(rows) - len(external)}
+
     async def get_volume_map(self, external_id: str) -> dict[float, int]:
         """Volume assignments from the aggregate endpoint, across all
         languages — it covers chapters the feed can't serve (e.g. titles

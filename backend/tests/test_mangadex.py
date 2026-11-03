@@ -66,3 +66,33 @@ def test_configure_resets_tokens_when_credentials_change(source):
 
     assert source._access_token is None
     assert source._token_expires_at == 0.0
+
+
+@respx.mock
+async def test_chapter_sync_reads_all_pages_including_decimal_chapters(source):
+    def row(n):
+        return {"id": str(n), "attributes": {"chapter": str(n), "volume": "1", "title": "Chapter", "translatedLanguage": "en"}}
+    route = respx.get(f"{API_URL}/manga/test/feed").mock(side_effect=[
+        httpx.Response(200, json={"data": [row(n) for n in range(1, 501)], "total": 501}),
+        httpx.Response(200, json={"data": [row(500.5)], "total": 501}),
+    ])
+    chapters = await source.list_chapters("test")
+    assert len(chapters) == 501 and chapters[-1].number == 500.5
+    assert [call.request.url.params["offset"] for call in route.calls] == ["0", "500"]
+    assert all(call.request.url.params["includeExternalUrl"] == "0" for call in route.calls)
+
+
+@respx.mock
+async def test_diagnostics_distinguishes_external_publisher_links(source):
+    respx.get(f"{API_URL}/manga/test/feed").respond(json={"total": 2, "data": [
+        {"attributes": {"externalUrl": "https://publisher.example/chapter/1"}},
+        {"attributes": {"externalUrl": None}},
+    ]})
+    assert await source.chapter_diagnostics("test") == {"language": "en", "listed_releases": 2, "external_releases": 1, "hosted_releases": 1}
+
+
+@respx.mock
+async def test_diagnostics_rejects_truncated_feed(source):
+    respx.get(f"{API_URL}/manga/test/feed").respond(json={"total": 2, "data": []})
+    with pytest.raises(ValueError, match="Incomplete"):
+        await source.chapter_diagnostics("test")

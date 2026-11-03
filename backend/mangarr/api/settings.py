@@ -25,6 +25,12 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 MASK = "••••••••"
 
 
+@router.get("/sources/status")
+async def sources_status():
+    from ..source_status import snapshot
+    return {"sources": snapshot(), "scope": "since_restart"}
+
+
 class PermissionAction(BaseModel):
     id: str = Field(pattern=r"^[0-9a-f]{32}$")
 

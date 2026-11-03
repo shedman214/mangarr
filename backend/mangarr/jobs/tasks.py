@@ -135,6 +135,8 @@ def _source_cooling_down(name: str) -> bool:
 
 
 def _note_source_failure(name: str, exc: BaseException) -> None:
+    from .. import source_status
+    source_status.failure(name, exc, SOURCE_COOLDOWN_SECONDS if is_transient_error(exc) else 0)
     if is_transient_error(exc):
         if not _source_cooling_down(name):
             # once per cooldown: the series skipped during it log at debug
@@ -183,6 +185,8 @@ async def _list_chapters_cached(
     else:
         try:
             chapters = await src.list_chapters(external_id)
+            from .. import source_status
+            source_status.success(src.name, len(chapters))
         except Exception as exc:
             _note_source_failure(src.name, exc)
             raise

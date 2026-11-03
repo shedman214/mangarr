@@ -11,6 +11,7 @@ import { FolderBrowser } from "../components/FolderBrowser";
 import { ErrorNotice, Spinner, Toggle, Toolbar } from "../components/common";
 import { SOURCE_LABELS } from "../sources";
 import { PermissionsSettings } from "../components/PermissionsSettings";
+import { SourceStatus } from "../components/SourceStatus";
 
 function RootFolders() {
   const queryClient = useQueryClient();
@@ -687,6 +688,7 @@ export default function Settings() {
           </div>
           <SourcePriority form={form} setForm={setForm} />
           <ToonilyTest />
+          <SourceStatus />
           <p className="section-hint">
             Discovery routes a source's title searches, chapter lists, page manifests,
             metadata, and request-signing assets through the configured proxy. It also applies
