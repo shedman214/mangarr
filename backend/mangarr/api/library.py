@@ -542,7 +542,8 @@ async def resync_chapters(series_id: int, session: AsyncSession = Depends(get_se
     being rebuilt."""
     from sqlalchemy import delete as sa_delete, func, or_
 
-    from ..jobs.tasks import acquire_series_lock, update_chapters, _source_retry_at
+    from ..jobs.tasks import acquire_series_lock, update_chapters, _source_retry_at, _note_source_failure
+    from .. import source_status
     from ..models import Download, DownloadStatus, HistoryEvent
 
     lock = await acquire_series_lock(series_id)
@@ -589,7 +590,10 @@ async def resync_chapters(series_id: int, session: AsyncSession = Depends(get_se
             try:
                 chapters = await src.list_chapters(link.external_id)
             except Exception as exc:
-                raise HTTPException(502, f"{name} chapter lookup failed: {exc}. Existing chapters were kept.") from exc
+                _note_source_failure(name, exc)
+                message = source_status.snapshot()[name]["error"]
+                raise HTTPException(502, f"{name} chapter lookup failed: {message} Existing chapters were kept.") from exc
+            source_status.success(name, len(chapters))
             if not chapters:
                 raise HTTPException(422, f"{name} returned no chapters for this series link. Check the link and source availability. Existing chapters were kept.")
             chapter_cache[(name, link.external_id)] = chapters

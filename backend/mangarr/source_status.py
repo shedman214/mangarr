@@ -1,5 +1,7 @@
 """Small, credential-free source observations for the running process."""
 from datetime import datetime, timedelta, timezone
+from http import HTTPStatus
+import re
 
 import httpx
 
@@ -20,6 +22,9 @@ def failure(name: str, exc: BaseException, retry_seconds: float = 0) -> str:
         message = "Source request timed out."
     elif isinstance(exc, httpx.RequestError):
         message = "Could not connect to the source or its configured proxy."
+    elif match := re.search(r"\b(401|403|404|429|502|503)\s+(?:Forbidden|Not Found|Unauthorized|Too Many Requests|Bad Gateway|Service Unavailable)\b", str(exc)):
+        code = int(match.group(1))
+        message = f"Source returned HTTP {code} {HTTPStatus(code).phrase}."
     else:
         message = f"Source check failed ({type(exc).__name__})."
     now = datetime.now(timezone.utc)
