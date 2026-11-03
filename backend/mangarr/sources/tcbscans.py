@@ -13,7 +13,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from .. import USER_AGENT
-from ..util import RateLimiter, normalize_title, parse_chapter_number, rl_request
+from ..util import RateLimiter, normalize_title, parse_chapter_number
 from .base import DirectSource, SourceChapter, SourceSeries
 
 BASE_URL = "https://tcbonepiecechapters.com"
@@ -46,7 +46,7 @@ class TCBScansSource(DirectSource):
         return {"Referer": f"{BASE_URL}/"}
 
     async def _get_html(self, url: str) -> BeautifulSoup:
-        resp = await rl_request(self._client, "GET", url, limiter=_limiter)
+        resp = await self.discovery_request("GET", url, limiter=_limiter)
         resp.raise_for_status()
         return BeautifulSoup(resp.text, "lxml")
 

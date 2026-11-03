@@ -65,8 +65,8 @@ class MangaPlusSource(DirectSource):
         self._catalog_at = 0.0
 
     async def _get(self, path: str, params: dict | None = None) -> dict:
-        resp = await rl_request(
-            self._client, "GET", f"{API_URL}{path}", limiter=_limiter,
+        resp = await self.discovery_request(
+            "GET", f"{API_URL}{path}", limiter=_limiter,
             params=params, headers={"Session-Token": self._session_token},
         )
         resp.raise_for_status()

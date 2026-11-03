@@ -16,6 +16,7 @@ CONTENT_SOURCE_NAMES = (
     "asura",
     "toonily",
 )
+DISCOVERY_SOURCE_NAMES = (*CONTENT_SOURCE_NAMES, "viz", "wikipedia", "nyaa")
 
 DEFAULTS: dict[str, str] = {
     # Media management
@@ -70,10 +71,11 @@ DEFAULTS: dict[str, str] = {
     # Official metadata-only source for VIZ-licensed properties.
     "source_viz_enabled": "true",
     # Optional HTTP(S) proxy used only for chapter page/image bytes. Source
-    # discovery, metadata, authentication, and page manifests stay direct.
+    # discovery and manifests have independent per-source toggles below.
     "download_proxy_url": "",
-    # Explicit opt-in: includes title search, chapter lists, and signing assets.
+    # Legacy test-build key, migrated to the per-source key by get_all().
     "mangafire_discovery_proxy_enabled": "false",
+    **{f"source_{name}_discovery_proxy_enabled": "false" for name in DISCOVERY_SOURCE_NAMES},
     **{f"source_{name}_proxy_enabled": "false" for name in CONTENT_SOURCE_NAMES},
     # Jobs
     "monitor_interval_minutes": "60",
@@ -175,7 +177,11 @@ def validate(values: dict[str, str]) -> None:
         and values.get(f"source_{name}_proxy_enabled") == "true"
         for name in CONTENT_SOURCE_NAMES
     )
-    if (proxy_enabled or values.get("mangafire_discovery_proxy_enabled") == "true") and not values.get("download_proxy_url"):
+    discovery_enabled = any(
+        values.get(f"source_{name}_discovery_proxy_enabled") == "true"
+        for name in DISCOVERY_SOURCE_NAMES
+    )
+    if (proxy_enabled or discovery_enabled) and not values.get("download_proxy_url"):
         raise ValueError(
             "download_proxy_url is required when a source content or discovery proxy is enabled"
         )
@@ -188,7 +194,12 @@ def validate(values: dict[str, str]) -> None:
 async def get_all(session: AsyncSession) -> dict[str, str]:
     rows = (await session.execute(select(Setting))).scalars().all()
     values = dict(DEFAULTS)
-    values.update({r.key: r.value for r in rows if r.key in DEFAULTS})
+    stored = {r.key: r.value for r in rows if r.key in DEFAULTS}
+    values.update(stored)
+    # Preserve the MangaFire-only option from the earlier test build unless
+    # the new per-source switch has been explicitly saved.
+    if "source_mangafire_discovery_proxy_enabled" not in stored:
+        values["source_mangafire_discovery_proxy_enabled"] = values["mangafire_discovery_proxy_enabled"]
     return values
 
 

@@ -243,6 +243,15 @@ function SourcePriority({
             </span>
             <span className="priority-name">{SOURCE_LABELS[name] ?? name}</span>
             <span className="priority-hint">{SOURCE_HINTS[name] ?? ""}</span>
+            <span className="priority-toggle priority-discovery-toggle" title="Proxy title search, chapter lists, and source metadata">
+              <span>Discovery</span>
+              <Toggle
+                on={form[`source_${name}_discovery_proxy_enabled`] === "true"}
+                disabled={!enabled}
+                label={`Use proxy for ${SOURCE_LABELS[name] ?? name} discovery`}
+                onChange={(on) => setForm({ ...form, [`source_${name}_discovery_proxy_enabled`]: on ? "true" : "false" })}
+              />
+            </span>
             {CONTENT_SOURCES.has(name) && (
               <span className="priority-toggle priority-proxy-toggle" title="Proxy chapter page/image downloads">
                 <span>Proxy</span>
@@ -298,8 +307,8 @@ function ProxySettings({
       <h3>Proxy</h3>
       <p className="section-hint">
         Optionally route chapter page and image downloads through one HTTP proxy. Discovery,
-        metadata, authentication, and page manifests connect directly unless you enable
-        the separate MangaFire discovery proxy option under Sources.
+        searches, chapter lists, and page manifests connect directly unless you enable
+        a source's separate Discovery proxy toggle. MangaDex password login stays direct.
       </p>
       <div className="form-row">
         <label>Proxy address</label>
@@ -658,24 +667,16 @@ export default function Settings() {
             </div>
             <p className="section-hint">
               Proxy applies only to chapter page/image downloads for checked sources. Discovery,
-              metadata, authentication, and page manifests remain direct unless you enable
-              MangaFire discovery below. Checked sources fail
+              metadata and page manifests remain direct unless that source's Discovery
+              toggle is enabled. MangaDex password login stays direct. Checked sources fail
               closed instead of retrying directly when the proxy is unavailable.
             </p>
           </div>
           <SourcePriority form={form} setForm={setForm} />
-          <div className="form-row" style={{ marginTop: 16 }}>
-            <label>MangaFire discovery proxy</label>
-            <Toggle
-              on={form.mangafire_discovery_proxy_enabled === "true"}
-              label="Use proxy for MangaFire search and chapter discovery"
-              onChange={(on) => setForm({ ...form, mangafire_discovery_proxy_enabled: on ? "true" : "false" })}
-            />
-          </div>
           <p className="section-hint">
-            Use the configured proxy for MangaFire title searches, chapter lists, page manifests,
-            and request-signing assets. Enable this if direct MangaFire requests return 403.
-            Proxy failures are reported without retrying directly.
+            Discovery routes a source's title searches, chapter lists, page manifests,
+            metadata, and request-signing assets through the configured proxy. It also applies
+            to manually linked series. Proxy failures are reported without retrying directly.
           </p>
         </div>
 

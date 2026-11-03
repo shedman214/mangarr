@@ -40,7 +40,7 @@ class ToonilySource(DirectSource):
         )
 
     async def _html(self, path: str, *, method: str = "GET", params: dict | None = None) -> BeautifulSoup:
-        response = await rl_request(self._client, method, BASE_URL + path, limiter=_limiter, params=params)
+        response = await self.discovery_request(method, BASE_URL + path, limiter=_limiter, params=params)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "lxml")
         if soup.title and any(text in soup.title.get_text().lower() for text in ("just a moment", "access denied")):

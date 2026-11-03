@@ -22,7 +22,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from .. import USER_AGENT
-from ..util import RateLimiter, rl_request
+from ..util import RateLimiter
 from .base import DirectSource, SourceChapter, SourceSeries
 
 SITE_URL = "https://www.webtoons.com"
@@ -129,7 +129,7 @@ class WebtoonsSource(DirectSource):
         return {"Referer": f"{SITE_URL}/"}
 
     async def _request(self, url: str, **kwargs) -> httpx.Response:
-        response = await rl_request(self._client, "GET", url, limiter=_limiter, **kwargs)
+        response = await self.discovery_request("GET", url, limiter=_limiter, **kwargs)
         response.raise_for_status()
         return response
 

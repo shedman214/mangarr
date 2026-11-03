@@ -14,7 +14,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from .. import USER_AGENT
-from ..util import RateLimiter, normalize_title, rl_request
+from ..util import RateLimiter, normalize_title
 from .base import ChapterMetadata, DirectSource, SourceChapter, SourceSeries
 
 BASE_URL = "https://www.viz.com"
@@ -68,8 +68,8 @@ class VizSource(DirectSource):
         self._cache: dict[str, tuple[float, list[ChapterMetadata]]] = {}
 
     async def search_series(self, query: str) -> list[SourceSeries]:
-        response = await rl_request(
-            self._client, "GET", f"{BASE_URL}/search", limiter=_limiter,
+        response = await self.discovery_request(
+            "GET", f"{BASE_URL}/search", limiter=_limiter,
             params={"search": query},
         )
         response.raise_for_status()
@@ -108,7 +108,7 @@ class VizSource(DirectSource):
         if cached and cached[0] > time.monotonic():
             return list(cached[1])
         url = urljoin(BASE_URL, external_id)
-        response = await rl_request(self._client, "GET", url, limiter=_limiter)
+        response = await self.discovery_request("GET", url, limiter=_limiter)
         response.raise_for_status()
         rows = parse_archive(response.text, url)
         self._cache[external_id] = (time.monotonic() + CACHE_TTL, rows)

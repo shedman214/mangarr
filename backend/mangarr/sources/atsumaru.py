@@ -20,7 +20,7 @@ from urllib.parse import urljoin
 import httpx
 
 from .. import USER_AGENT
-from ..util import RateLimiter, rl_request
+from ..util import RateLimiter
 from .base import DirectSource, SourceChapter, SourceSeries
 
 SITE_URL = "https://atsu.moe"
@@ -57,8 +57,8 @@ class AtsumaruSource(DirectSource):
         return {"Referer": f"{SITE_URL}/"}
 
     async def _get(self, path: str, params: dict | None = None) -> dict:
-        response = await rl_request(
-            self._client, "GET", f"{SITE_URL}{path}", limiter=_limiter, params=params
+        response = await self.discovery_request(
+            "GET", f"{SITE_URL}{path}", limiter=_limiter, params=params
         )
         response.raise_for_status()
         return response.json()

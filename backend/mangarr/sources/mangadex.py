@@ -5,7 +5,7 @@ import time
 import httpx
 
 from .. import USER_AGENT
-from ..util import RateLimiter, parse_chapter_number, rl_request
+from ..util import RateLimiter, parse_chapter_number
 from .base import DirectSource, SourceChapter, SourceSeries
 
 log = logging.getLogger(__name__)
@@ -177,8 +177,8 @@ class MangaDexSource(DirectSource):
         headers = {}
         if self._access_token:
             headers["Authorization"] = f"Bearer {self._access_token}"
-        resp = await rl_request(
-            self._client, "GET", f"{API_URL}{path}",
+        resp = await self.discovery_request(
+            "GET", f"{API_URL}{path}",
             limiter=_athome_limiter if athome else _api_limiter,
             params=params, headers=headers,
         )

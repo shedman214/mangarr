@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 import httpx
@@ -60,12 +61,43 @@ class TorrentRelease:
     leechers: int = 0
 
 
-class DirectSource(ABC):
+class SourceNetwork:
+    """Separate, opt-in routing for source discovery; image routing is independent."""
+
+    name: str
+    _client: httpx.AsyncClient
+    discovery_proxy_enabled: bool = False
+    discovery_proxy_url: str = ""
+
+    @asynccontextmanager
+    async def discovery_client(self):
+        enabled, proxy = self.discovery_proxy_enabled, self.discovery_proxy_url
+        if not enabled:
+            yield self._client
+            return
+        if not proxy:
+            raise RuntimeError(f"{self.name} discovery proxy is enabled but has no URL")
+        async with httpx.AsyncClient(
+            proxy=proxy, headers=self._client.headers, timeout=self._client.timeout,
+            cookies=self._client.cookies, trust_env=False,
+            follow_redirects=self._client.follow_redirects,
+        ) as client:
+            try:
+                yield client
+            finally:
+                self._client.cookies.update(client.cookies)
+
+    async def discovery_request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        async with self.discovery_client() as client:
+            return await rl_request(client, method, url, **kwargs)
+
+
+class DirectSource(SourceNetwork, ABC):
     """A site we can search, list chapters on, and pull page images from."""
 
     name: str
     # Configured at runtime by registry.apply_settings(). Only page/image
-    # bytes use this; source API and metadata clients remain direct.
+    # bytes use this; source discovery has its own opt-in routing above.
     content_proxy_enabled: bool = False
     content_proxy_url: str = ""
     # per-source proactive limiter for page-image fetches (separate from the
@@ -110,7 +142,7 @@ class DirectSource(ABC):
         return []
 
 
-class TorrentIndexer(ABC):
+class TorrentIndexer(SourceNetwork, ABC):
     name: str
 
     @abstractmethod

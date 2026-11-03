@@ -19,7 +19,7 @@ import httpx
 import mwparserfromhell
 
 from .. import USER_AGENT
-from ..util import RateLimiter, rl_request
+from ..util import RateLimiter
 from .base import ChapterMetadata, DirectSource, SourceChapter, SourceSeries
 
 API_URL = "https://en.wikipedia.org/w/api.php"
@@ -199,8 +199,8 @@ class WikipediaSource(DirectSource):
         self._metadata_cache: dict[str, tuple[float, list[ChapterMetadata]]] = {}
 
     async def _query(self, params: dict) -> dict:
-        resp = await rl_request(
-            self._client, "GET", API_URL, limiter=_limiter,
+        resp = await self.discovery_request(
+            "GET", API_URL, limiter=_limiter,
             params={**params, "format": "json", "formatversion": 2},
         )
         resp.raise_for_status()

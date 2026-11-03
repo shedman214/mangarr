@@ -10,7 +10,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from .. import USER_AGENT
-from ..util import RateLimiter, parse_chapter_number, rl_request
+from ..util import RateLimiter, parse_chapter_number
 from .base import DirectSource, SourceChapter, SourceSeries
 
 BASE_URL = "https://weebcentral.com"
@@ -41,7 +41,7 @@ class WeebCentralSource(DirectSource):
         return {"Referer": f"{BASE_URL}/"}
 
     async def _get_html(self, url: str, params: dict | None = None) -> BeautifulSoup:
-        resp = await rl_request(self._client, "GET", url, limiter=_limiter, params=params)
+        resp = await self.discovery_request("GET", url, limiter=_limiter, params=params)
         resp.raise_for_status()
         return BeautifulSoup(resp.text, "lxml")
 

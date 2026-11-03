@@ -48,8 +48,9 @@ async def apply_settings(session: AsyncSession) -> dict[str, str]:
         language=values["mangadex_language"],
     )
     proxy_url = values["download_proxy_url"].strip()
-    mangafire_source.discovery_proxy_enabled = values.get("mangafire_discovery_proxy_enabled") == "true"
-    mangafire_source.discovery_proxy_url = proxy_url if mangafire_source.discovery_proxy_enabled else ""
+    for name, source in {**DIRECT_SOURCES, **TORRENT_INDEXERS}.items():
+        source.discovery_proxy_enabled = values.get(f"source_{name}_discovery_proxy_enabled") == "true"
+        source.discovery_proxy_url = proxy_url if source.discovery_proxy_enabled else ""
     for name, source in DIRECT_SOURCES.items():
         source.content_proxy_enabled = (
             name in settings_service.CONTENT_SOURCE_NAMES

@@ -61,4 +61,4 @@ async def test_missing_discovery_proxy_url_fails_closed():
 
 def test_discovery_proxy_requires_configured_url():
     with pytest.raises(ValueError, match="download_proxy_url is required"):
-        settings_service.validate({**settings_service.DEFAULTS, "mangafire_discovery_proxy_enabled": "true"})
+        settings_service.validate({**settings_service.DEFAULTS, "source_mangafire_discovery_proxy_enabled": "true"})

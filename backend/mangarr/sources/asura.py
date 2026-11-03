@@ -9,7 +9,7 @@ whose early-access window hasn't opened yet.
 import httpx
 
 from .. import USER_AGENT
-from ..util import RateLimiter, parse_chapter_number, rl_request
+from ..util import RateLimiter, parse_chapter_number
 from .base import DirectSource, SourceChapter, SourceSeries
 
 SITE_URL = "https://asurascans.com"
@@ -39,7 +39,7 @@ class AsuraSource(DirectSource):
         return {"Referer": f"{SITE_URL}/"}
 
     async def _get(self, path: str, params: dict | None = None) -> dict:
-        resp = await rl_request(self._client, "GET", f"{API_URL}{path}",
+        resp = await self.discovery_request("GET", f"{API_URL}{path}",
                                 limiter=_limiter, params=params)
         resp.raise_for_status()
         return resp.json()

@@ -272,12 +272,16 @@ rollback journal on the next start.
 Everything else (sources, credentials, naming templates, qBittorrent,
 monitor interval) lives in the UI under Settings and is stored in the DB.
 
-**MangaFire returning 403 during search or chapter discovery:** the normal
+**A source returning 403 during search or chapter discovery:** the normal
 content-proxy toggle only routes image downloads. In Settings → Sources,
-enable **MangaFire discovery proxy** to also route MangaFire searches,
-chapter lists, page manifests, and request-signing assets through the
-configured proxy. This is a separate opt-in and never falls back to direct
-requests if the proxy fails. After saving, re-sync the linked series.
+enable that source's **Discovery** toggle to also route its searches,
+chapter lists, page manifests, metadata, and request-signing assets through
+the configured proxy. Each direct source, metadata source, and the Nyaa
+indexer has an independent switch. MangaDex password login stays direct;
+authenticated API requests use the selected discovery route. These switches
+apply equally to automatically matched and manually linked series. This is
+a separate opt-in and never falls back to direct requests if the proxy fails.
+After saving, re-sync the linked series.
 Re-sync checks linked content sources before removing existing chapter
 records, and reports failed, disabled, or empty sources instead of reporting
 a successful empty rebuild.
