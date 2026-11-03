@@ -63,12 +63,12 @@ function RootFolders() {
   );
 }
 
-function ToonilyTest() {
-  const test = useMutation({ mutationFn: () => api.post<{ chapters_found: number; pages_downloaded: number; archive_bytes: number; archive_path: string; mode: string; uid: number; gid: number }>("/settings/toonily/test") });
+function SourceDownloadTest({ source, label }: { source: string; label: string }) {
+  const test = useMutation({ mutationFn: () => api.post<{ chapters_found: number; pages_downloaded: number; archive_bytes: number; archive_path: string; mode: string; uid: number; gid: number }>(`/settings/${source}/test`) });
   return <div style={{ marginTop: 18 }}>
-    <h4>Test Toonily</h4>
+    <h4>Test {label}</h4>
     <p className="section-hint">Searches Solo Leveling, lists chapters, and downloads chapter 1 into a separate appdata test folder. Your library files are untouched. Save source and proxy settings before testing.</p>
-    <button className="btn" disabled={test.isPending} onClick={() => test.mutate()}>{test.isPending ? "Testing search and download…" : "Test Toonily download"}</button>
+    <button className="btn" disabled={test.isPending} onClick={() => test.mutate()}>{test.isPending ? "Testing search and download…" : `Test ${label} download`}</button>
     <ErrorNotice error={test.error} />
     {test.data && <div role="status"><p>Passed: {test.data.chapters_found} chapters found; {test.data.pages_downloaded} images downloaded; archive verified ({(test.data.archive_bytes / 1048576).toFixed(1)} MiB).</p><p className="section-hint">{test.data.archive_path}<br />Permissions: {test.data.mode}, owner {test.data.uid}:{test.data.gid}</p></div>}
   </div>;
@@ -687,7 +687,8 @@ export default function Settings() {
             </p>
           </div>
           <SourcePriority form={form} setForm={setForm} />
-          <ToonilyTest />
+          <SourceDownloadTest source="toonily" label="Toonily" />
+          <SourceDownloadTest source="mangafire" label="MangaFire" />
           <SourceStatus />
           <p className="section-hint">
             Discovery routes a source's title searches, chapter lists, page manifests,

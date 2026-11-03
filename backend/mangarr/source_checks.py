@@ -12,24 +12,33 @@ from .download.direct import download_chapter_to_cbz
 from .sources import registry
 
 _toonily_lock = asyncio.Lock()
+_mangafire_lock = asyncio.Lock()
 TOONILY_SAMPLE = "solo-leveling-574def58"
 
 
 async def check_toonily(session) -> dict:
-    if _toonily_lock.locked():
-        raise ValueError("A Toonily download test is already running")
-    async with _toonily_lock:
+    return await _check_sample(session, "toonily", TOONILY_SAMPLE, _toonily_lock)
+
+
+async def check_mangafire(session) -> dict:
+    return await _check_sample(session, "mangafire", "lrmyz", _mangafire_lock)
+
+
+async def _check_sample(session, name: str, sample: str, lock: asyncio.Lock) -> dict:
+    if lock.locked():
+        raise ValueError(f"A {name} download test is already running")
+    async with lock:
         await registry.apply_settings(session)
-        source = registry.DIRECT_SOURCES["toonily"]
+        source = registry.DIRECT_SOURCES[name]
         results = await source.search_series("Solo Leveling")
-        matched = next((r for r in results if r.external_id == TOONILY_SAMPLE), None)
+        matched = next((r for r in results if r.external_id == sample), None)
         if matched is None:
-            raise ValueError("Toonily search did not find the sample series")
-        chapters = await source.list_chapters(TOONILY_SAMPLE)
+            raise ValueError(f"{name} search did not find the sample series")
+        chapters = await source.list_chapters(sample)
         chapter = next((c for c in chapters if c.number == 1), None)
         if chapter is None:
-            raise ValueError("Toonily did not list sample chapter 1")
-        destination = config.data_dir / "source-tests" / "toonily" / uuid.uuid4().hex / "Solo Leveling - Chapter 001.cbz"
+            raise ValueError(f"{name} did not list sample chapter 1")
+        destination = config.data_dir / "source-tests" / name / uuid.uuid4().hex / "Solo Leveling - Chapter 001.cbz"
         await download_chapter_to_cbz(
             source, chapter.external_id,
             SimpleNamespace(title="Solo Leveling", description=""),

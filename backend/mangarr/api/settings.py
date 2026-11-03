@@ -44,6 +44,16 @@ async def toonily_test(session: AsyncSession = Depends(get_session)):
         raise HTTPException(502, f"Toonily test failed: {exc}") from exc
 
 
+@router.post("/mangafire/test")
+async def mangafire_test(session: AsyncSession = Depends(get_session)):
+    from ..source_checks import check_mangafire
+    try:
+        return await check_mangafire(session)
+    except Exception as exc:
+        from ..source_status import failure
+        raise HTTPException(502, f"MangaFire test failed: {failure('mangafire', exc)}") from exc
+
+
 @router.get("/permissions/status")
 async def permission_status():
     return {"supported": hasattr(os, "fchown"), "uid": os.getuid() if hasattr(os, "getuid") else None,

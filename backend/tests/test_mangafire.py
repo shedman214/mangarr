@@ -219,3 +219,38 @@ async def test_signer_reports_a_missing_signing_module():
     async with httpx.AsyncClient() as client:
         with pytest.raises(MangaFireTokenError, match="getProtectionToken"):
             await signer.sign(client, "/titles", {"keyword": "x"})
+
+@respx.mock
+async def test_frontend_failure_uses_bundled_signing_and_caches_for_ten_minutes():
+    from unittest.mock import AsyncMock
+    from mangarr.sources._mangafire_fmd import sign_request
+    signer = StubSigner()
+    signer.sign = AsyncMock(side_effect=MangaFireTokenError('frontend blocked'))
+    source = MangaFireSource(signer=signer)
+    route = respx.get(f'{API_URL}/titles').respond(json={'items': []})
+    await source.search_series('Solo Leveling')
+    await source.search_series('Other Title')
+    assert signer.sign.await_count == 1
+    assert route.calls[0].request.url.params['vrf'] == sign_request('/titles', 'keyword=Solo Leveling')
+    assert route.calls[1].request.url.params['vrf'] == sign_request('/titles', 'keyword=Other Title')
+    await source._client.aclose()
+
+
+@respx.mock
+async def test_bundled_signing_rejection_is_bounded():
+    from unittest.mock import AsyncMock
+    signer = StubSigner()
+    signer.sign = AsyncMock(side_effect=MangaFireTokenError('frontend blocked'))
+    source = MangaFireSource(signer=signer)
+    route = respx.get(f'{API_URL}/chapters/1').respond(403, json={'message': 'Invalid token.'})
+    with pytest.raises(httpx.HTTPStatusError):
+        await source.get_pages('1')
+    assert route.call_count == 2 and signer.invalidated == 1
+    await source._client.aclose()
+
+
+def test_bundled_signing_vectors_match_fmd_and_live_frontend():
+    from mangarr.sources._mangafire_fmd import sign_request
+    assert sign_request('/chapters/1') == '8vPRXa1JjvVTxq8'
+    assert sign_request('/titles', 'keyword=Solo Leveling') == '8sK3xtqdFZfetBhus6bRAuzLtZTk514b9Flx2ng'
+    assert sign_request('/titles/lrmyz/chapters', 'language=en&page=1') == '8sK3xtqdFds2fBsR2V1A_WnuBx0Kj6940v2ugQco1MyBOM02ZYG0DD0'

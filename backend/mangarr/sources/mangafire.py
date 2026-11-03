@@ -8,6 +8,8 @@ script (see ``_mangafire_vrf``).
 """
 
 import re
+import logging
+import time
 from math import floor, isclose
 from urllib.parse import urljoin
 
@@ -15,11 +17,13 @@ import httpx
 
 from .. import USER_AGENT
 from ..util import RateLimiter, rl_request
-from ._mangafire_vrf import MangaFireSigner
+from ._mangafire_vrf import MangaFireSigner, MangaFireTokenError
+from ._mangafire_fmd import sign_request
 from .base import DirectSource, SourceChapter, SourceSeries
 
 BASE_URL = "https://mangafire.to"
 API_URL = f"{BASE_URL}/api"
+log = logging.getLogger(__name__)
 
 _limiter = RateLimiter(rate=2, per_seconds=1)
 _image_limiter = RateLimiter(rate=5, per_seconds=1)
@@ -74,6 +78,7 @@ class MangaFireSource(DirectSource):
         signer: MangaFireSigner | None = None,
     ) -> None:
         self._signer = signer or MangaFireSigner(BASE_URL)
+        self._fallback_until = 0.0
         self._client = client or httpx.AsyncClient(
             headers={
                 "User-Agent": USER_AGENT,
@@ -92,6 +97,7 @@ class MangaFireSource(DirectSource):
             # the site shipped a new build (new signing keys) since the
             # module was loaded; reload it and try once more
             self._signer.invalidate()
+            self._fallback_until = 0.0
             response = await self._signed_get(path, params)
         response.raise_for_status()
         return response.json()
@@ -104,7 +110,17 @@ class MangaFireSource(DirectSource):
         self, client: httpx.AsyncClient, path: str, params: dict | None,
     ) -> httpx.Response:
         query = dict(params or {})
-        query["vrf"] = await self._signer.sign(client, path, params)
+        # The frontend signs sorted, decoded parameters, then URL-encodes the
+        # HTTP query separately. Signing '+' instead of a space breaks search.
+        canonical = "&".join(f"{key}={value}" for key, value in sorted(httpx.QueryParams(query).multi_items()))
+        token = None
+        if time.monotonic() >= self._fallback_until:
+            try:
+                token = await self._signer.sign(client, path, params)
+            except MangaFireTokenError:
+                self._fallback_until = time.monotonic() + 600
+                log.warning("MangaFire frontend signer unavailable; trying bundled API signing on the configured route")
+        query["vrf"] = token or sign_request(path, canonical)
         return await rl_request(
             client, "GET", f"{API_URL}{path}", limiter=_limiter, params=query
         )

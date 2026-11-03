@@ -348,6 +348,16 @@ legitimate.
 
 ### Checking source availability
 
+MangaFire normally loads its current request signer from the site's frontend.
+If that frontend is unavailable, Mangarr tries a bundled FMD2-compatible API
+signer on the same configured discovery route. It caches this fallback for ten
+minutes, then probes the dynamic signer again. A rejected token triggers at
+most one refresh/retry; other API errors still fail normally. No cookies,
+browser challenge solving, or alternate network route is added. Bundled
+protocol constants may need an update if MangaFire changes its signing keys.
+**Test MangaFire download** in Settings verifies Solo Leveling search,
+chapter discovery, and a complete chapter-1 CBZ in an isolated appdata folder.
+
 In a series' **Edit sources** dialog, **Check chapters** tests the exact
 saved link without rebuilding chapters, changing files, or queuing downloads.
 It reports distinct downloadable chapter numbers and release counts. MangaDex
