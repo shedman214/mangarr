@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { Settings } from "../api/types";
 import { ErrorNotice, Toggle } from "./common";
 
 type Preview = { preview_id: string; count: number; skipped: number; examples: { path: string; before: number[]; after: number[] }[] };
+type Job = { id: string; operation: string; state: string; phase: string; processed: number; total: number | null; listed?: number; changed: number; skipped: number; error?: string; undo_id?: string; result?: Preview & Result };
+
 type Result = { changed: number; skipped: number; error_count: number; errors: { path: string; error: string }[]; undo_id: string | null };
 
 export function PermissionsSettings({ form, setForm, dirty }: { form: Settings; setForm: (form: Settings) => void; dirty: boolean }) {
@@ -16,20 +18,32 @@ export function PermissionsSettings({ form, setForm, dirty }: { form: Settings; 
   const [confirm, setConfirm] = useState(false);
   const { data: status } = useQuery({ queryKey: ["permissions-status"], queryFn: () => api.get<{ supported: boolean; uid: number; gid: number }>("/settings/permissions/status") });
   useEffect(() => { setPreview(null); setConfirm(false); }, [form]);
+  const queryClient = useQueryClient();
+  const { data: job, error: jobError } = useQuery({ queryKey: ["permission-job"], queryFn: () => api.get<Job | null>("/settings/permissions/jobs/latest"), refetchInterval: 2000 });
+  const remember = (value: Job) => queryClient.setQueryData(["permission-job"], value);
+  useEffect(() => {
+    if (job?.state === "complete" && job.result) {
+      if (job.operation === "preview" && !dirty) setPreview(job.result);
+      else if (job.operation !== "preview") {
+        setPreview(null); setConfirm(false);
+        setResult({ ...job.result, undo_id: job.operation === "undo" ? null : job.result.undo_id });
+      }
+    }
+  }, [job?.id, job?.state, dirty]);
   const scan = useMutation({
-    mutationFn: () => api.post<Preview>("/settings/permissions/preview"),
+    mutationFn: () => api.post<Job>("/settings/permissions/jobs", { operation: "preview" }),
     onMutate: () => { setPreview(null); setConfirm(false); setResult(null); },
-    onSuccess: setPreview,
+    onSuccess: remember,
   });
   const fix = useMutation({
-    mutationFn: () => api.post<Result>("/settings/permissions/fix", { id: preview!.preview_id }),
-    onSuccess: (r) => { setResult(r); setPreview(null); setConfirm(false); },
+    mutationFn: () => api.post<Job>("/settings/permissions/jobs", { operation: "fix", id: preview!.preview_id }),
+    onSuccess: remember,
   });
   const undo = useMutation({
-    mutationFn: () => api.post<Result>("/settings/permissions/undo", { id: result!.undo_id }),
-    onSuccess: (r) => setResult({ ...r, undo_id: null }),
+    mutationFn: () => api.post<Job>("/settings/permissions/jobs", { operation: "undo", id: result!.undo_id }),
+    onSuccess: remember,
   });
-  const busy = scan.isPending || fix.isPending || undo.isPending;
+  const busy = job?.state === "running" || scan.isPending || fix.isPending || undo.isPending;
   const set = (key: string, value: string) => setForm({ ...form, [key]: value });
   return <section className="settings-section" aria-label="Permissions">
     <h3>Permissions</h3>
@@ -61,12 +75,18 @@ export function PermissionsSettings({ form, setForm, dirty }: { form: Settings; 
     {dirty && <p className="section-hint">Save Changes before previewing or fixing permissions.</p>}
     {status && !status.supported && <p className="section-hint">Permission repair is available in the Linux container.</p>}
     <button className="btn" disabled={dirty || busy || !status?.supported} onClick={() => scan.mutate()}>{scan.isPending ? "Checking…" : "Preview permissions"}</button>
-    {preview && <div role="status" style={{ marginTop: 12 }}>
+    {job && <div role="status" aria-live="polite" style={{ marginTop: 12 }}>
+      <p>{job.phase}: {job.processed.toLocaleString()}{job.total != null ? ` / ${job.total.toLocaleString()} files` : " files"}. {job.changed.toLocaleString()} need changes or changed; {job.skipped.toLocaleString()} skipped.{job.phase === "Listing library" && <> {job.listed?.toLocaleString() || 0} paths listed.</>}</p>
+      {job.state === "running" && <><progress value={job.total ? job.processed : undefined} max={job.total || undefined} /><p className="section-hint">This runs in the background. You can leave Settings and return to view progress.</p></>}
+      {job.error && <p className="error-banner">{job.error}</p>}
+      {(job.state === "interrupted" || job.state === "failed") && job.undo_id && <button className="btn" disabled={busy} onClick={() => { setResult({ changed: job.changed, skipped: job.skipped, error_count: 0, errors: [], undo_id: job.undo_id! }); }}>Show undo for partial repair</button>}
+    </div>}
+    {preview && !busy && <div role="status" style={{ marginTop: 12 }}>
       <p>{preview.count} file(s) need changes. {preview.skipped} unavailable or protected file(s) skipped.</p>
       {preview.examples.length > 0 && <div style={{ maxHeight: 240, overflow: "auto" }}><table className="data-table"><thead><tr><th>File</th><th>Current mode / owner</th><th>New mode / owner</th></tr></thead><tbody>{preview.examples.map((e) => <tr key={e.path}><td style={{ overflowWrap: "anywhere" }}>{e.path}</td><td>{e.before[0].toString(8)} / {e.before[1]}:{e.before[2]}</td><td>{e.after[0].toString(8)} / {e.after[1]}:{e.after[2]}</td></tr>)}</tbody></table></div>}
       {preview.count > 0 && <><label style={{ display: "block", margin: "12px 0" }}><input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} /> Apply these permission changes to the previewed files.</label><button className="btn" disabled={!enabled || !confirm || busy || dirty} onClick={() => fix.mutate()}>Fix previewed files</button>{!enabled && <p className="section-hint">Enable Set permissions and save before applying a repair.</p>}</>}
     </div>}
     {result && <div role="status"><p>Changed {result.changed}; skipped {result.skipped}; errors {result.error_count}.</p>{result.undo_id && <button className="btn" disabled={busy} onClick={() => undo.mutate()}>Undo this repair</button>}{result.errors.map((e) => <p key={e.path} className="error-banner">{e.path}: {e.error}</p>)}</div>}
-    <ErrorNotice error={scan.error || fix.error || undo.error} />
+    <ErrorNotice error={scan.error || fix.error || undo.error || jobError} />
   </section>;
 }

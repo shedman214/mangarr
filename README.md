@@ -346,6 +346,17 @@ legitimate.
 
 ## Roadmap
 
+### Background permission operations
+
+Permission previews, repairs, and undo operations now run as background jobs.
+Settings shows their progress, and reopening the page reconnects to the latest
+job. Library paths and preview mismatches are streamed to disk without a file
+count limit; the browser receives only 50 example rows. A repair still applies
+to every file in the completed preview, with identity checks before changes.
+Job progress and undo IDs are saved under `/config/logs/permissions`; an
+interrupted repair can be undone after a restart. Previews expire one hour
+after completion. Existing synchronous API endpoints remain compatible.
+
 ### Checking source availability
 
 MangaFire normally loads its current request signer from the site's frontend.

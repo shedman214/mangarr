@@ -123,10 +123,10 @@ def _fingerprint(info) -> list[int]:
     return [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns]
 
 
-def _open_managed(path: Path, root: Path) -> int:
+def _open_managed(path: Path, root: Path, *, resolved_root: Path | None = None) -> int:
     # Reject symlinks at every component; repairs never traverse a linked
     # directory into another share, even if the final file is a regular CBZ.
-    root = root.resolve(strict=True)
+    root = resolved_root if resolved_root is not None else root.resolve(strict=True)
     absolute = path.absolute()
     relative = absolute.relative_to(root)
     if not relative.parts or any(part in {".", ".."} for part in relative.parts):
@@ -155,33 +155,48 @@ def _store_path(data_dir: Path, token: str, kind: str) -> Path:
     return folder / f"{kind}-{token}.{'jsonl' if kind == 'undo' else 'json'}"
 
 
-def preview(candidates: list[tuple[str, str]], data_dir: Path) -> dict:
-    policy = _policy
+def preview(candidates, data_dir: Path, *, progress=None, policy=None) -> dict:
+    policy = policy or _policy
     if not hasattr(os, "fchown"):
         raise ValueError("Media permission repair requires a Linux container.")
-    entries, skipped = [], 0
-    for path, root in sorted(set(candidates)):
-        try:
-            if Path(path).suffix.lower() != ".cbz":
-                continue
-            fd = _open_managed(Path(path), Path(root))
-            try:
-                info = os.fstat(fd)
-            finally:
-                os.close(fd)
-            before = [stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid]
-            desired = [policy.file_mode, policy.uid if policy.uid >= 0 else info.st_uid, policy.gid if policy.gid >= 0 else info.st_gid]
-            if before != desired:
-                entries.append({"path": path, "root": root, "identity": _fingerprint(info), "before": before, "after": desired})
-        except (OSError, ValueError):
-            skipped += 1
     token = uuid.uuid4().hex
-    record = {"created": time.time(), "policy": asdict(policy), "entries": entries}
-    _store_path(data_dir, token, "preview").write_text(json.dumps(record), encoding="utf-8")
-    return {"preview_id": token, "count": len(entries), "skipped": skipped, "examples": entries[:50], "enabled": policy.enabled}
+    manifest = _store_path(data_dir, token, "preview")
+    count, skipped, scanned, examples = 0, 0, 0, []
+    roots: dict[str, Path] = {}
+    # Stream mismatches to disk; only the first 50 are sent to the browser.
+    with manifest.with_suffix(".jsonl").open("w", encoding="utf-8") as output:
+        for path, root in candidates:
+            try:
+                if Path(path).suffix.lower() != ".cbz":
+                    continue
+                if root not in roots:
+                    roots[root] = Path(root).resolve(strict=True)
+                fd = _open_managed(Path(path), Path(root), resolved_root=roots[root])
+                try:
+                    info = os.fstat(fd)
+                finally:
+                    os.close(fd)
+                before = [stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid]
+                desired = [policy.file_mode, policy.uid if policy.uid >= 0 else info.st_uid, policy.gid if policy.gid >= 0 else info.st_gid]
+                if before != desired:
+                    entry = {"path": path, "root": root, "identity": _fingerprint(info), "before": before, "after": desired}
+                    output.write(json.dumps(entry) + "\n")
+                    count += 1
+                    if len(examples) < 50:
+                        examples.append(entry)
+            except (OSError, ValueError):
+                skipped += 1
+            finally:
+                scanned += 1
+                if progress:
+                    progress({"processed": scanned, "changed": count, "skipped": skipped})
+    # A preview becomes usable only when its scan is complete. Expiry starts
+    # here, so a long scan does not expire before the user can review it.
+    manifest.write_text(json.dumps({"version": 2, "created": time.time(), "policy": asdict(policy), "count": count}), encoding="utf-8")
+    return {"preview_id": token, "count": count, "skipped": skipped, "scanned": scanned, "examples": examples, "enabled": policy.enabled}
 
 
-def repair(data_dir: Path, token: str, *, undo: bool = False) -> dict:
+def repair(data_dir: Path, token: str, *, undo: bool = False, progress=None) -> dict:
     if not _repair_lock.acquire(blocking=False):
         raise ValueError("Another permissions repair is running")
     try:
@@ -198,7 +213,7 @@ def repair(data_dir: Path, token: str, *, undo: bool = False) -> dict:
             raise ValueError("Save and enable the permissions settings, then preview again before applying.")
         if not undo and time.time() - record["created"] > 3600:
             raise ValueError("This preview expired; preview again before applying.")
-        changed, skipped, errors = 0, 0, []
+        changed, skipped, errors, error_count, processed = 0, 0, [], 0, 0
         journal_id = uuid.uuid4().hex
         journal_path = _store_path(data_dir, journal_id, "undo")
         def append_journal(entry):
@@ -206,7 +221,19 @@ def repair(data_dir: Path, token: str, *, undo: bool = False) -> dict:
                 handle.write(json.dumps(entry) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
-        for entry in record["entries"]:
+        if not undo and record.get("version") == 2:
+            def streamed_entries():
+                with source.with_suffix(".jsonl").open(encoding="utf-8") as handle:
+                    for line in handle:
+                        yield json.loads(line)
+            entries = streamed_entries()
+            total = record["count"]
+        else:
+            entries = record["entries"]
+            total = len(entries)
+        if progress:
+            progress({"total": total, "processed": 0, "undo_id": journal_id})
+        for entry in entries:
             try:
                 fd = _open_managed(Path(entry["path"]), Path(entry["root"]))
                 try:
@@ -229,7 +256,13 @@ def repair(data_dir: Path, token: str, *, undo: bool = False) -> dict:
                 finally:
                     os.close(fd)
             except (OSError, ValueError) as exc:
-                errors.append({"path": entry["path"], "error": str(exc)})
-        return {"changed": changed, "skipped": skipped, "errors": errors[:50], "error_count": len(errors), "undo_id": journal_id if journal_path.exists() else None}
+                error_count += 1
+                if len(errors) < 50:
+                    errors.append({"path": entry["path"], "error": str(exc)})
+            finally:
+                processed += 1
+                if progress:
+                    progress({"total": total, "processed": processed, "changed": changed, "skipped": skipped, "error_count": error_count, "undo_id": journal_id})
+        return {"changed": changed, "skipped": skipped, "errors": errors[:50], "error_count": error_count, "undo_id": journal_id if journal_path.exists() else None}
     finally:
         _repair_lock.release()

@@ -35,6 +35,37 @@ class PermissionAction(BaseModel):
     id: str = Field(pattern=r"^[0-9a-f]{32}$")
 
 
+class PermissionJobIn(BaseModel):
+    operation: str = Field(pattern=r"^(preview|fix|undo)$")
+    id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+
+@router.post("/permissions/jobs", status_code=202)
+async def start_permission_job(body: PermissionJobIn):
+    from .. import permission_jobs
+    if body.operation != "preview" and body.id is None:
+        raise HTTPException(422, "A preview or undo ID is required")
+    try:
+        return await permission_jobs.start(body.operation, body.id)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/permissions/jobs/latest")
+async def latest_permission_job():
+    from ..permission_jobs import get_job
+    return await asyncio.to_thread(get_job)
+
+
+@router.get("/permissions/jobs/{job_id}")
+async def permission_job(job_id: str):
+    from ..permission_jobs import get_job
+    try:
+        return await asyncio.to_thread(get_job, job_id)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
 @router.post("/toonily/test")
 async def toonily_test(session: AsyncSession = Depends(get_session)):
     from ..source_checks import check_toonily

@@ -152,3 +152,39 @@ def test_changed_policy_and_expired_preview_require_a_fresh_preview(tmp_path):
     path.write_text(json.dumps(record))
     with pytest.raises(ValueError, match="expired"):
         p.repair(data, preview["preview_id"])
+
+@linux
+def test_large_preview_streams_all_results_with_bounded_examples(tmp_path, monkeypatch):
+    enable()
+    sample = tmp_path / 'sample.cbz'
+    sample.write_bytes(b'archive')
+    sample.chmod(0o600)
+    fd = os.open(sample, os.O_RDONLY)
+    monkeypatch.setattr(p, '_open_managed', lambda *args, **kwargs: os.dup(fd))
+    progress = []
+    try:
+        result = p.preview(((str(tmp_path / f'{n}.cbz'), str(tmp_path)) for n in range(50002)),
+                           tmp_path / 'config', progress=lambda value: progress.append(value['processed']) if value['processed'] in (1, 50002) else None)
+    finally:
+        os.close(fd)
+    assert result['count'] == result['scanned'] == 50002
+    assert len(result['examples']) == 50 and progress == [1, 50002]
+    manifest = p._store_path(tmp_path / 'config', result['preview_id'], 'preview')
+    assert 'entries' not in json.loads(manifest.read_text())
+    with manifest.with_suffix('.jsonl').open() as handle:
+        assert sum(1 for _ in handle) == 50002
+
+
+@linux
+def test_legacy_preview_remains_repairable(tmp_path):
+    enable()
+    file = tmp_path / 'chapter.cbz'
+    file.write_bytes(b'archive')
+    file.chmod(0o600)
+    result = p.preview([(str(file), str(tmp_path))], tmp_path / 'config')
+    manifest = p._store_path(tmp_path / 'config', result['preview_id'], 'preview')
+    record = json.loads(manifest.read_text())
+    record.pop('version')
+    record['entries'] = [json.loads(line) for line in manifest.with_suffix('.jsonl').read_text().splitlines()]
+    manifest.write_text(json.dumps(record))
+    assert p.repair(tmp_path / 'config', result['preview_id'])['changed'] == 1
