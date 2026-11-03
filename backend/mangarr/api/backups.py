@@ -18,6 +18,11 @@ async def create_backup():
     return await asyncio.to_thread(backups.create, config.data_dir)
 
 
+@router.get("")
+async def list_backups():
+    return await asyncio.to_thread(backups.list_backups, config.data_dir)
+
+
 @router.get("/restore")
 async def restore_status():
     return backups.status(config.data_dir)

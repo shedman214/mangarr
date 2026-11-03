@@ -35,8 +35,13 @@ log = logging.getLogger("mangarr")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
-    from .backups import restore_pending
+    from .backups import pre_migration_backup, restore_pending
     await asyncio.to_thread(restore_pending, config.data_dir)
+    if config.premigration_backup:
+        # Refuses to start (and so to migrate) if the safety copy fails; MANGARR_PREMIGRATION_BACKUP=false skips it.
+        saved = await asyncio.to_thread(pre_migration_backup, config.data_dir)
+        if saved:
+            log.info("Saved pre-migration backup %s before updating the database (%d change(s))", saved["id"], len(saved["changes"]))
     await init_db()
     from . import settings_service
     async with session_scope() as session:

@@ -295,6 +295,7 @@ Environment variables (all optional):
 | `MANGARR_PORT`       | `6996`        | HTTP port                                         |
 | `MANGARR_DATA_DIR`   | `data`        | SQLite DB, API key, cached settings               |
 | `MANGARR_SQLITE_WAL` | `true`        | Use SQLite WAL mode (see below)                   |
+| `MANGARR_PREMIGRATION_BACKUP` | `true` | Back up the database before an upgrade changes its layout (see Backup and restore) |
 | `MANGARR_LOG_LEVEL`  | `INFO`        | Log level (uppercase: `DEBUG`, `INFO`, `WARNING`) |
 | `MANGARR_API_KEY`    | *(generated)* | Fixed web UI API key instead of a generated one   |
 
@@ -401,7 +402,8 @@ contains the database and the installation bootstrap key. Settings, source links
 library records, history, queue state, and database API keys are included. Media,
 logs, permission undo journals, container environment variables, and Docker mounts
 are excluded. Backups contain credentials: keep them private. A server copy is
-retained under `/config/backups`; retention is manual for now.
+retained under `/config/backups`, and Settings lists every saved backup with a
+Download button. Manual backups are never deleted automatically.
 
 To restore, upload a Mangarr backup ZIP from the same application version and
 confirm replacement. Mangarr checks entries, size limits, checksum, database
@@ -412,7 +414,20 @@ initialization and background jobs on the next startup. A safety backup is creat
 first, and restored archives are retained in `/config/backups`. The installation's
 current bootstrap key stays unchanged; database API keys and queue records come
 from the backup. Keep the same library mounts. No media files are restored or
-deleted. Automatic pre-migration backups are not yet implemented.
+deleted.
+
+## Automatic backup before database upgrades
+
+When a new version needs to add tables or columns, Mangarr first saves a backup of
+the existing database (read-only check, then the same online snapshot, integrity
+check, and checksum as a manual backup). It is labelled "Before database update" in
+Settings; the newest 5 of these are kept and older automatic ones are removed.
+Nothing is backed up on a fresh install or when the layout is already current. If
+this backup fails, Mangarr stops before changing the database and logs the reason;
+fix the cause (usually free space or permissions on `/config`) and start it again.
+`MANGARR_PREMIGRATION_BACKUP=false` skips the backup and lets the upgrade run
+without it, which is not recommended. A pre-upgrade backup can be restored on the
+same version through Settings; startup then upgrades it again.
 
 
 ## Additional experimental sources

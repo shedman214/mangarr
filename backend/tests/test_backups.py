@@ -1,4 +1,5 @@
 import hashlib
+import os
 import json
 import sqlite3
 import zipfile
@@ -92,3 +93,70 @@ def test_pending_restore_is_not_overwritten(tmp_path):
         else:
             backups.stage(tmp_path, upload)
     db.close()
+
+
+def old_layout(root):
+    """A database from before a release added a column and a table."""
+    db = library(root)
+    db.execute("ALTER TABLE series DROP COLUMN metadata_refreshed_at")  # a column db.py adds on upgrade
+    table = next(t.name for t in reversed(Base.metadata.sorted_tables) if t.name not in {"settings", "series"})
+    db.execute(f'DROP TABLE "{table}"')
+    db.commit()
+    return db, table
+
+
+def test_no_premigration_backup_when_layout_is_current_or_database_is_new(tmp_path):
+    assert backups.pre_migration_backup(tmp_path) is None  # fresh install: nothing to protect
+    library(tmp_path).close()
+    assert backups.pending_schema_changes(tmp_path / "mangarr.db") == []
+    assert backups.pre_migration_backup(tmp_path) is None
+    assert not list(backups.folder(tmp_path).glob("*.zip"))
+
+
+def test_premigration_backup_keeps_old_layout_and_can_be_restored(tmp_path):
+    db, table = old_layout(tmp_path)
+    db.close()
+    before = (tmp_path / "mangarr.db").read_bytes()
+    result = backups.pre_migration_backup(tmp_path)
+    assert (tmp_path / "mangarr.db").read_bytes() == before  # read-only: nothing migrated
+    assert table in result["changes"] and "series.metadata_refreshed_at" in result["changes"]
+    archive = backups.archive_path(tmp_path, result["id"])
+    with zipfile.ZipFile(archive) as z:
+        manifest = json.loads(z.read("manifest.json"))
+        assert manifest["reason"] == "pre-migration"
+        assert hashlib.sha256(z.read("mangarr.db")).hexdigest() == manifest["database_sha256"]
+    assert archive.stat().st_mode & 0o777 == 0o600
+    listed = backups.list_backups(tmp_path)
+    assert [(b["id"], b["reason"]) for b in listed] == [(result["id"], "pre-migration")]
+    # The pre-migration copy passes restore validation even though its layout is the old one.
+    upload = tmp_path / "upload.zip"
+    upload.write_bytes(archive.read_bytes())
+    assert backups.stage(tmp_path, upload)["pending"]
+
+
+def test_manual_backup_still_requires_current_layout(tmp_path):
+    old_layout(tmp_path)[0].close()
+    with pytest.raises(ValueError):
+        backups.create(tmp_path)
+
+
+def test_premigration_backups_are_pruned_but_manual_ones_kept(tmp_path, monkeypatch):
+    library(tmp_path / "current").close()
+    manual = backups.create(tmp_path / "current")["id"]
+    old_layout(tmp_path)[0].close()
+    backups.folder(tmp_path).mkdir(parents=True, exist_ok=True)
+    os.replace(backups.archive_path(tmp_path / "current", manual), backups.archive_path(tmp_path, manual))
+    clock = iter(range(1_800_000_000, 1_800_001_000))
+    monkeypatch.setattr(backups.time, "time", lambda: next(clock))
+    made = [backups.pre_migration_backup(tmp_path)["id"] for _ in range(backups.KEEP_PREMIGRATION + 2)]
+    ids = {b["id"] for b in backups.list_backups(tmp_path)}
+    assert manual in ids
+    assert ids - {manual} == set(made[-backups.KEEP_PREMIGRATION:])
+
+
+def test_premigration_backup_failure_is_raised(tmp_path, monkeypatch):
+    old_layout(tmp_path)[0].close()
+    monkeypatch.setattr(backups, "_validate_db", lambda *a, **k: (_ for _ in ()).throw(ValueError("corrupt")))
+    with pytest.raises(ValueError):
+        backups.pre_migration_backup(tmp_path)
+    assert not list(backups.folder(tmp_path).glob("*.zip"))

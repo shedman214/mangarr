@@ -36,3 +36,13 @@ async def test_backup_routes_require_app_auth():
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://test") as client:
         assert (await client.post("/settings/backups")).status_code in {401,403}
         assert (await client.post("/settings/backups/restore", content=b"bad")).status_code in {401,403}
+
+
+async def test_list_backups(app, tmp_path):
+    from tests.test_backups import library
+    library(tmp_path).close()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.get("/settings/backups")).json() == []
+        made = (await client.post("/settings/backups")).json()
+        listed = (await client.get("/settings/backups")).json()
+    assert [(b["id"], b["reason"]) for b in listed] == [(made["id"], "manual")]

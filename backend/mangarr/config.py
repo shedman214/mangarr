@@ -19,6 +19,9 @@ class AppConfig(BaseSettings):
     # SQLite write-ahead log. Needs local storage for data_dir; set to false
     # if /config lives on NFS/SMB, where WAL's shared memory file is unreliable.
     sqlite_wal: bool = True
+    # Take a validated database backup before an upgrade changes tables or columns,
+    # and refuse to upgrade if that backup fails. false skips it (not recommended).
+    premigration_backup: bool = True
 
     @property
     def db_path(self) -> Path:
