@@ -100,6 +100,8 @@ def apply_created(path: Path, *, directory: bool = False) -> None:
 
 def mkdir_created(path: Path) -> None:
     """Apply policy only to directory components this call actually creates."""
+    if path.exists() and not path.is_dir():
+        raise FileExistsError(f"Not a directory: {path}")
     missing = []
     current = path
     while not current.exists():
@@ -113,6 +115,8 @@ def mkdir_created(path: Path) -> None:
         except FileExistsError:
             continue
         apply_created(folder, directory=True)
+    if not path.is_dir():
+        raise FileExistsError(f"Not a directory: {path}")
 
 
 def _fingerprint(info) -> list[int]:

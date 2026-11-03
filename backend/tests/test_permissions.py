@@ -40,6 +40,14 @@ def test_only_created_directories_are_applied(tmp_path, monkeypatch):
     assert len(applied) == 2
 
 
+def test_directory_creation_rejects_an_existing_file(tmp_path):
+    path = tmp_path / "file"
+    path.write_text("preserve")
+    with pytest.raises(FileExistsError):
+        p.mkdir_created(path)
+    assert path.read_text() == "preserve"
+
+
 linux = pytest.mark.skipif(not hasattr(os, "fchown"), reason="Unix ownership and file modes")
 
 
