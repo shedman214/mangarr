@@ -42,6 +42,17 @@ class ToomicsSource(HtmlArchive):
                 results[identifier] = SourceSeries(self.name, identifier, title, self.base_url + "/en/webtoon/episode/toon/" + identifier)
         return list(results.values())[:30]
 
+    async def test_session(self):
+        """Read-only check; a reachable public page alone does not prove login."""
+        soup = await self.html("/en", follow_redirects=False, timeout=20, retries=0)
+        for anchor in soup.select("a[href], a[onclick], button[onclick]"):
+            action = str(anchor.get("href", "")) + " " + str(anchor.get("onclick", ""))
+            if re.search(r"(?:/|\b)(?:logout|signout|sign_out)\b", action, re.I):
+                return {"status": "signed_in", "message": "Cookie accepted: Toomics shows a signed-in session. Family Safe and free-episode availability still depend on your Toomics account."}
+        if soup.select_one('[onclick*="modal-login-header"]'):
+            return {"status": "signed_out", "message": "Toomics shows a signed-out session. The cookie may have expired or be incomplete. Sign in on Toomics and copy a fresh cookie."}
+        return {"status": "unknown", "message": "Toomics responded, but Mangarr could not confirm sign-in. The site may have changed or returned a check page. This does not confirm that the cookie works."}
+
     async def list_chapters(self, external_id):
         if not external_id.isdigit():
             raise ValueError("Invalid Toomics series ID")

@@ -75,6 +75,32 @@ async def toonily_test(session: AsyncSession = Depends(get_session)):
         raise HTTPException(502, f"Toonily test failed: {exc}") from exc
 
 
+class ToomicsCookieTestIn(BaseModel):
+    session_cookie: str = Field(default=MASK, repr=False)
+
+
+@router.post("/toomics/test-cookie")
+async def toomics_cookie_test(body: ToomicsCookieTestIn, session: AsyncSession = Depends(get_session)):
+    from ..sources.toomics import ToomicsSource
+    values = await settings_service.get_all(session)
+    cookie = values.get("toomics_session_cookie", "") if body.session_cookie == MASK else body.session_cookie
+    if not cookie.strip():
+        raise HTTPException(422, "Paste a Toomics session cookie before testing.")
+    source = ToomicsSource()
+    try:
+        source.configure(cookie)
+        source.discovery_proxy_enabled = values.get("source_toomics_discovery_proxy_enabled") == "true"
+        source.discovery_proxy_url = values.get("download_proxy_url", "").strip()
+        return await source.test_session()
+    except ValueError:
+        raise HTTPException(422, "Invalid cookie. Paste only the Cookie header value, on one line.") from None
+    except Exception:
+        # Exception text can contain request details. Never echo a session secret.
+        raise HTTPException(502, "Could not check the Toomics cookie. The site may be blocking requests or unavailable. Check your saved discovery proxy settings and try again.") from None
+    finally:
+        await source._client.aclose()
+
+
 @router.post("/mangafire/test")
 async def mangafire_test(session: AsyncSession = Depends(get_session)):
     from ..source_checks import check_mangafire

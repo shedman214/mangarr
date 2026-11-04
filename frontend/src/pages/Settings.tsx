@@ -14,6 +14,7 @@ import { PermissionsSettings } from "../components/PermissionsSettings";
 import { SourceStatus } from "../components/SourceStatus";
 import { BackupSettings } from "../components/BackupSettings";
 import { LoginSettings } from "../components/LoginSettings";
+import ToomicsCookieTest from "../components/ToomicsCookieTest";
 import { LogSettings } from "../components/LogSettings";
 import { UpgradeSettings } from "../components/UpgradeSettings";
 import { AdultContentSettings } from "../components/AdultContentSettings";
@@ -724,6 +725,7 @@ export default function Settings() {
               <p className="section-hint">Treat it like a password: anyone with it is signed in as you. It stops working when you sign out of Toomics or the session expires — copy a fresh one then. Never paste it into issues, chats or logs.</p>
             </details>
             <div className="form-row"><label htmlFor="toomics-cookie">Session cookie</label><input id="toomics-cookie" type="password" autoComplete="off" value={form.toomics_session_cookie || ""} onChange={e => setForm({ ...form, toomics_session_cookie: e.target.value })} /></div>
+            <ToomicsCookieTest cookie={form.toomics_session_cookie || ""} />
           </div>
           <SourceDownloadTest source="mangafire" label="MangaFire" />
           <SourceStatus />
