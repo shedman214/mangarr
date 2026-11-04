@@ -139,3 +139,38 @@ async def test_cookie_is_secure_behind_https_proxy():
         result = await c.put("/api/v1/settings/login", headers={"X-Api-Key": key, "X-Forwarded-Proto": "https"},
                              json={"enabled": True, "username": "admin", "new_password": PASSWORD})
         assert "secure" in result.headers["set-cookie"].lower()
+
+
+async def test_revoked_browser_key_requires_session_but_managed_keys_keep_working():
+    async with client() as c:
+        key = (await c.get("/initialize.json")).json()["apiKey"]
+        managed = (await c.post("/api/v1/apikeys", headers={"X-Api-Key": key}, json={"name": "script"})).json()["key"]
+        key = (await enable(c, key)).json()["apiKey"]
+        headers = {"X-Api-Key": key}
+        assert (await c.get("/api/v1/settings/login", headers=headers)).status_code == 200
+        await c.post("/auth/logout")
+        assert (await c.get("/api/v1/settings/login", headers=headers)).status_code == 401
+        assert (await c.get("/api/v1/settings/login", headers={"X-Api-Key": managed})).status_code == 200
+        await c.post("/auth/login", json={"username": "admin", "password": PASSWORD})
+        async with client() as other:
+            await other.post("/auth/login", json={"username": "admin", "password": PASSWORD})
+            changed = await c.put("/api/v1/settings/login", headers=headers, json={
+                "enabled": True, "new_password": "replacement password", "current_password": PASSWORD})
+            assert changed.status_code == 200
+            assert (await other.get("/api/v1/settings/login", headers=headers)).status_code == 401
+
+
+async def test_recovery_can_replace_a_forgotten_password(monkeypatch):
+    async with client() as c:
+        await enable(c, (await c.get("/initialize.json")).json()["apiKey"])
+    monkeypatch.setattr(config, "login_disabled", True)
+    async with client() as c:
+        boot = await c.get("/initialize.json")
+        assert boot.headers["cache-control"] == "no-store"
+        changed = await enable(c, boot.json()["apiKey"], new_password="recovered password")
+        assert changed.status_code == 200
+    monkeypatch.setattr(config, "login_disabled", False)
+    async with client() as c:
+        assert (await c.get("/initialize.json")).status_code == 401
+        assert (await c.post("/auth/login", json={"username": "admin", "password": PASSWORD})).status_code == 401
+        assert (await c.post("/auth/login", json={"username": "admin", "password": "recovered password"})).status_code == 204

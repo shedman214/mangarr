@@ -2,7 +2,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +29,8 @@ def replace_bootstrap_key() -> str:
     key = secrets.token_hex(16)
     path = config.data_dir / "api_key"
     temp = path.with_name(f".api_key-{secrets.token_hex(4)}.tmp")
-    temp.write_text(key)
+    with os.fdopen(os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as handle:
+        handle.write(key)
     os.replace(temp, path)
     _api_key = key
     return key
@@ -49,6 +50,7 @@ def _as_utc(value: datetime) -> datetime:
 
 
 async def require_api_key(
+    request: Request,
     x_api_key: str = Header(default=""),
     session: AsyncSession = Depends(get_session),
 ) -> None:
@@ -56,6 +58,11 @@ async def require_api_key(
         raise HTTPException(status_code=401, detail="Invalid API key")
     # Bootstrap key handed to the web UI via initialize.json.
     if x_api_key == get_api_key():
+        from .. import auth
+        # Browser keys must stop working when their session expires or is revoked.
+        # Explicit environment keys retain their documented script compatibility.
+        if auth.enabled() and not config.api_key and not auth.valid_session(request.cookies.get(auth.COOKIE)):
+            raise HTTPException(status_code=401, detail="Login required")
         return
     # User-managed keys created in Settings.
     row = (

@@ -81,8 +81,8 @@ async def initialize(request: Request):
     from . import auth
     if auth.enabled() and not auth.valid_session(request.cookies.get(auth.COOKIE)):
         # With login on, the key (and so the API) is only handed to a signed-in browser.
-        return JSONResponse({"detail": "Login required", "loginRequired": True, "version": __version__}, status_code=401)
-    return {"apiKey": get_api_key(), "version": __version__, "urlBase": "", "login": auth.enabled()}
+        return JSONResponse({"detail": "Login required", "loginRequired": True, "version": __version__}, status_code=401, headers={"Cache-Control": "no-store"})
+    return JSONResponse({"apiKey": get_api_key(), "version": __version__, "urlBase": "", "login": auth.enabled()}, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/ping")

@@ -123,6 +123,8 @@ def list_backups(data_dir):
                 if z.getinfo("manifest.json").file_size > 4096:
                     continue
                 manifest = json.loads(z.read("manifest.json"))
+                if not isinstance(manifest, dict) or not isinstance(manifest.get("created"), (int, float)):
+                    continue
         except (OSError, KeyError, ValueError, zipfile.BadZipFile):
             continue
         out.append({"id": path.stem, "created": manifest.get("created"), "version": manifest.get("version"),

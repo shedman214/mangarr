@@ -1,5 +1,5 @@
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from mangarr.api import apikeys
@@ -53,10 +53,10 @@ async def test_require_api_key_accepts_managed_key(session, monkeypatch):
     assert created.last_used_at is None
 
     # bootstrap key (used by the web UI) is accepted
-    await require_api_key("bootstrap-key", session)
+    await require_api_key(Request({"type": "http", "headers": []}), "bootstrap-key", session)
 
     # a managed key is accepted and stamps last_used_at
-    await require_api_key(created.key, session)
+    await require_api_key(Request({"type": "http", "headers": []}), created.key, session)
     refreshed = await session.get(ApiKey, created.id)
     assert refreshed.last_used_at is not None
 
@@ -64,7 +64,7 @@ async def test_require_api_key_accepts_managed_key(session, monkeypatch):
     # request must still be accepted after reading that value back.
     await session.refresh(created)
     assert created.last_used_at.tzinfo is None
-    await require_api_key(created.key, session)
+    await require_api_key(Request({"type": "http", "headers": []}), created.key, session)
 
 
 @pytest.mark.asyncio
@@ -72,5 +72,5 @@ async def test_require_api_key_rejects_unknown_and_empty(session, monkeypatch):
     monkeypatch.setattr("mangarr.api.deps.get_api_key", lambda: "bootstrap-key")
     for bad in ("", "not-a-real-key"):
         with pytest.raises(HTTPException) as exc:
-            await require_api_key(bad, session)
+            await require_api_key(Request({"type": "http", "headers": []}), bad, session)
         assert exc.value.status_code == 401

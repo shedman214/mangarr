@@ -189,7 +189,8 @@ def configure(*, enable: bool, username: str = "", new_password: str = "", curre
         active = bool(state.get("enabled") and state.get("password"))
         # Re-enabling with the saved password proves knowledge of it, like any change while on.
         reuse = enable and not new_password and bool(state.get("password"))
-        if (active or reuse) and not _check_password(current_password, state.get("password", "")):
+        recovery = config.login_disabled and bool(new_password)
+        if (active or reuse) and not recovery and not _check_password(current_password, state.get("password", "")):
             raise LoginError("Current password is incorrect")
         if not enable:
             # Keep the credentials so login can be turned back on; drop every session.

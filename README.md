@@ -351,6 +351,9 @@ a single username and password. While it is on:
   earlier stop working. Scripts and apps should use keys from **Settings → API
   Keys**, which keep working. A fixed `MANGARR_API_KEY` cannot be replaced, and
   anyone who knows it can still use the API; Settings warns about this.
+- The generated browser key also requires a valid session on API requests, so
+  signing out, session expiry, and password changes revoke that browser's access.
+  Bootstrap responses are not cached. User-managed script keys remain independent.
 - Changing the password or turning login off requires the current password, and
   signs out every other browser. Five failed sign-ins from one address within
   15 minutes block further attempts for a minute.
