@@ -33,7 +33,7 @@ import { RelatedTitles } from "../components/RelatedTitles";
 import { sanitizeDescription } from "../sanitize";
 import { sourceLabel } from "../sources";
 
-function InteractiveSearch({
+export function InteractiveSearch({
   seriesId,
   chapterIds,
   includeTorrents = true,

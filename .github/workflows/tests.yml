@@ -57,6 +57,11 @@ jobs:
         working-directory: frontend
         run: npm ci --no-fund --no-audit
 
+      # behavior tests (jsdom): source linking, search failures, queue retry, confirmations
+      - name: Test
+        working-directory: frontend
+        run: npm test
+
       - name: Build
         working-directory: frontend
         run: npm run build

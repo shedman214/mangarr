@@ -268,7 +268,7 @@ python -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/uvicorn mangarr.main:app --port 6996 --reload
 ```
 
-Frontend (Node 20.19+ or 22.12+, as required by Vite 8):
+Frontend (Node 22.12+; the jsdom used by the frontend tests needs Node 22):
 
 ```bash
 cd frontend
@@ -280,6 +280,7 @@ Tests:
 
 ```bash
 cd backend && .venv/bin/python -m pytest
+cd frontend && npm test   # Vitest + Testing Library behavior tests in frontend/tests/
 ```
 
 `npm run build` writes the production bundle to `backend/static/`, which the

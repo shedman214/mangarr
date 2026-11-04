@@ -3,6 +3,19 @@
 Reviewed the checkout starting at `121dbd1`. This is a source review and local
 test run, not a review of the running Unraid installation.
 
+## Status (2026-11-03)
+
+| # | Item | State |
+| - | ---- | ----- |
+| 1 | Fork-owned image, compose, template | Done: compose, Unraid template, CA profile, README and User-Agent point to `ghcr.io/shedman214/mangarr` / this repository |
+| 2 | Tests gate publishing | Done: `test-image.yml` publishes only after `tests.yml` passes |
+| 3 | Built-in login | Not started — design to be agreed first (changes network access) |
+| 4 | Backup and restore | Done, including the automatic backup before database upgrades (`MANGARR_PREMIGRATION_BACKUP`) and a saved-backups list |
+| 5 | Source failures in the interface | Done: source status table, per-link check, search warnings |
+| 6 | Frontend behavior tests | Done: `npm test` (Vitest, jsdom) runs in CI; queue removal now asks for confirmation |
+
+The original review follows unchanged.
+
 ## Improvements worth doing next
 
 1. **Make releases belong to this fork.** `docker-compose.yml` and

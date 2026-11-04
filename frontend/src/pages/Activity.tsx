@@ -4,6 +4,14 @@ import { api } from "../api/client";
 import type { HistoryItem, QueueItem } from "../api/types";
 import { EmptyState, ErrorNotice, Spinner, statusPill, Toolbar } from "../components/common";
 
+/** Removal stops downloads, and qBittorrent also deletes a torrent's downloaded data. */
+function confirmRemove(items: QueueItem[]): boolean {
+  const what = items.length === 1 ? `"${items[0].title || items[0].series_title}"` : `${items.length} items`;
+  const torrents = items.some((item) => item.kind === "torrent")
+    ? " Torrents are also removed from qBittorrent together with their downloaded data." : "";
+  return confirm(`Remove ${what} from the queue?${torrents}`);
+}
+
 function Queue() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
@@ -64,7 +72,9 @@ function Queue() {
         <button
           className="btn danger"
           disabled={selectedVisible.length === 0 || removeSelected.isPending}
-          onClick={() => removeSelected.mutate(selectedVisible)}
+          onClick={() => {
+            if (confirmRemove(data.filter((item) => selected.has(item.id)))) removeSelected.mutate(selectedVisible);
+          }}
         >
           {removeSelected.isPending ? "Removing…" : "Remove selected"}
         </button>
@@ -138,7 +148,7 @@ function Queue() {
                     title="Remove"
                     aria-label={`Remove ${item.title || item.series_title}`}
                     disabled={remove.isPending}
-                    onClick={() => remove.mutate(item.id)}
+                    onClick={() => confirmRemove([item]) && remove.mutate(item.id)}
                   >
                     ✕
                   </button>
