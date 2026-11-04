@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { HistoryItem, QueueItem } from "../api/types";
-import { EmptyState, ErrorNotice, Spinner, statusPill, Toolbar } from "../components/common";
+import { EmptyState, ErrorNotice, SelectionCheckbox, Spinner, statusPill, Toolbar } from "../components/common";
 
 /** Removal stops downloads, and qBittorrent also deletes a torrent's downloaded data. */
 function confirmRemove(items: QueueItem[]): boolean {
@@ -142,9 +142,8 @@ function Queue() {
           {data.map((item) => (
             <tr key={item.id}>
               <td className="cell-select">
-                <input
-                  type="checkbox"
-                  aria-label={`Select ${item.title || item.series_title}`}
+                <SelectionCheckbox
+                  label={`Select ${item.title || item.series_title}`}
                   checked={selected.has(item.id)}
                   onChange={() => toggle(item.id)}
                 />

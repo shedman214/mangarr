@@ -21,10 +21,12 @@ export default function Wanted() {
 
   return (
     <>
-      <Toolbar title="Wanted">
+      <Toolbar title="Wanted" className="wanted-toolbar">
+        <div className="wanted-pagination" aria-label="Wanted pages">
         <button className="btn" disabled={offset === 0 || isLoading} onClick={() => setOffset(Math.max(0, offset - pageSize))}>Previous</button>
         {page && <span>{page.total === 0 ? "0" : `${offset + 1}–${offset + data!.length}`} of {page.total} chapters</span>}
         <button className="btn" disabled={!page || offset + pageSize >= page.total || isLoading} onClick={() => setOffset(offset + pageSize)}>Next</button>
+        </div>
       </Toolbar>
       <div className="content">
         <ErrorNotice error={error} retry={() => void refetch()} />

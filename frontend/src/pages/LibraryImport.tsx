@@ -11,7 +11,7 @@ import type {
   RootFolder,
 } from "../api/types";
 import { MonitorModeFields } from "../components/SeriesAutomation";
-import { EmptyState, ErrorNotice, Modal, Spinner, Toggle, Toolbar, statusPill } from "../components/common";
+import { EmptyState, ErrorNotice, Modal, SelectionCheckbox, Spinner, Toggle, Toolbar, statusPill } from "../components/common";
 import { AddTabs } from "./AddSeries";
 
 interface Row {
@@ -118,11 +118,10 @@ function ImportRow({
   const selectable = !!c && !c.in_library;
   return (
     <div className={`import-row${row.selected ? " selected" : ""}`}>
-      <input
-        type="checkbox"
+      <SelectionCheckbox
         checked={row.selected}
         disabled={!selectable}
-        aria-label={`Import ${row.folder.name}`}
+        label={`Import ${row.folder.name}`}
         onChange={(e) => onToggle(e.target.checked)}
       />
       <div className="import-folder">

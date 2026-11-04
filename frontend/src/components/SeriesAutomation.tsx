@@ -193,7 +193,7 @@ export function AutomationModal({
               <div className={`priority-row${blocked.has(name) ? " disabled" : ""}`} key={name}>
                 <span className="priority-rank">{i + 1}</span>
                 <span className="priority-arrows">
-                  <button className="btn icon-btn" disabled={i === 0} onClick={() => move(i, -1)} title="Higher priority">
+                  <button className="btn icon-btn" disabled={i === 0} onClick={() => move(i, -1)} title="Higher priority" aria-label={`Move ${sourceLabel(name)} higher`}>
                     ↑
                   </button>
                   <button
@@ -201,6 +201,7 @@ export function AutomationModal({
                     disabled={i === order.length - 1}
                     onClick={() => move(i, 1)}
                     title="Lower priority"
+                    aria-label={`Move ${sourceLabel(name)} lower`}
                   >
                     ↓
                   </button>

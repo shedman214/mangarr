@@ -176,7 +176,7 @@ export function SourcesModal({
         right entry. You can also paste a series website link; its source is detected
         automatically. After fixing links, re-sync to rebuild the chapter list.
       </p>
-      <table className="data-table">
+      <table className="data-table source-links-table">
         <tbody>
           {links.length === 0 && (
             <tr><td className="muted">No source links.</td></tr>
@@ -197,8 +197,8 @@ export function SourcesModal({
       <ErrorNotice error={remove.error} />
 
       <h4 className="files-heading">Add / fix a source</h4>
-      <div className="form-row">
-        <select value={source} disabled={search.isPending} onChange={(e) => { setSource(e.target.value); setResults(null); search.reset(); }}>
+      <div className="form-row source-search-form">
+        <select aria-label="Source to search" value={source} disabled={search.isPending} onChange={(e) => { setSource(e.target.value); setResults(null); search.reset(); }}>
           <option value="">Source…</option>
           {sources?.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>

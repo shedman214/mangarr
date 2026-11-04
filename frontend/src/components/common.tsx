@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode, type InputHTMLAttributes } from "react";
 
 export function Toolbar({
   title,
@@ -62,7 +62,7 @@ export function Modal({
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <span id={titleId}>{title}</span>
-          <button type="button" aria-label="Close dialog" onClick={onClose} style={{ fontSize: 18, color: "var(--text-dim)" }}>
+          <button type="button" className="modal-close" aria-label="Close dialog" onClick={onClose} style={{ fontSize: 18, color: "var(--text-dim)" }}>
             ✕
           </button>
         </div>
@@ -101,6 +101,11 @@ export function Toggle({
       onClick={() => onChange(!on)}
     />
   );
+}
+
+/** Keep the native checkbox, with a larger label to tap on small screens. */
+export function SelectionCheckbox({ label, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "aria-label"> & { label: string }) {
+  return <label className="selection-check"><input {...props} type="checkbox" aria-label={label} /></label>;
 }
 
 export function formatBytes(bytes: number): string {

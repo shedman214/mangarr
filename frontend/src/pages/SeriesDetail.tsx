@@ -17,6 +17,7 @@ import {
   ErrorNotice,
   formatBytes,
   Modal,
+  SelectionCheckbox,
   Spinner,
   statusPill,
   Toolbar,
@@ -229,8 +230,8 @@ export function InteractiveSearch({
                   {directSelectable.length > 0 && (
                     <td className="cell-select">
                       {r.kind === "direct" && (r.chapter_id ?? soleChapterId) != null && (
-                        <input
-                          type="checkbox"
+                        <SelectionCheckbox
+                          label={`Select ${r.title} from ${sourceLabel(r.source_name)}`}
                           checked={selectedDirect.has(releaseKey(r))}
                           onChange={() => toggleDirect(r)}
                         />
@@ -889,8 +890,8 @@ export default function SeriesDetail() {
             className={`${selectedChapters.has(ch.id) ? "row-selected " : ""}${ch.excluded ? "row-excluded" : ""}` || undefined}
           >
             <td className="cell-select">
-              <input
-                type="checkbox"
+              <SelectionCheckbox
+                label={`Select ${chapterLabel(ch.number, ch.volume)}`}
                 checked={!ch.excluded && selectedChapters.has(ch.id)}
                 disabled={ch.excluded}
                 title="Shift-click to select a range"
