@@ -101,18 +101,39 @@ async def ping():
 
 # Serve the built frontend if present (production/Docker)
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-if STATIC_DIR.is_dir():
-    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
-    @app.get("/{full_path:path}")
+
+class _HashedAssets(StaticFiles):
+    """Built assets carry a content hash in their name, so they never change."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
+# index.html names the current assets: browsers must revalidate it, or they keep
+# showing the previous version's interface after an update.
+_REVALIDATE = {"Cache-Control": "no-cache"}
+
+
+def mount_frontend(target: FastAPI, static_dir: Path) -> None:
+    target.mount("/assets", _HashedAssets(directory=static_dir / "assets"), name="assets")
+
+    @target.get("/{full_path:path}")
     async def spa(full_path: str):
         if full_path:
             # resolve + containment check: the route param is percent-decoded,
             # so "..%2f" sequences would otherwise escape the static dir
-            candidate = (STATIC_DIR / full_path).resolve()
-            if candidate.is_relative_to(STATIC_DIR) and candidate.is_file():
-                return FileResponse(candidate)
-        return FileResponse(STATIC_DIR / "index.html")
+            candidate = (static_dir / full_path).resolve()
+            if candidate.is_relative_to(static_dir) and candidate.is_file():
+                return FileResponse(candidate, headers=_REVALIDATE)
+        return FileResponse(static_dir / "index.html", headers=_REVALIDATE)
+
+
+if STATIC_DIR.is_dir():
+    mount_frontend(app, STATIC_DIR)
 else:
 
     @app.get("/")

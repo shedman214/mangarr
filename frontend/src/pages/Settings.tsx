@@ -710,6 +710,18 @@ export default function Settings() {
           <div style={{ marginTop: 18 }}>
             <h4>Toomics session</h4>
             <p className="section-hint">Optional Cookie header from your own Toomics session. To use Family Safe off, complete Toomics’ age check and turn it off on their website first. Mangarr uses that session setting; it does not unlock VIP or coin episodes. Keep this value private.</p>
+            <details className="toomics-help">
+              <summary>How to get your session cookie</summary>
+              <ol className="section-hint">
+                <li>Open <a href="https://toomics.com/en" target="_blank" rel="noopener noreferrer">toomics.com/en</a> in your browser and sign in (a free account is enough).</li>
+                <li>For adult titles: complete Toomics’ age check, then switch <strong>Family Safe</strong> off on their website.</li>
+                <li>Press <kbd>F12</kbd> to open developer tools and choose the <strong>Network</strong> tab.</li>
+                <li>Reload the page (<kbd>F5</kbd>) and click the first request, <code>en</code> (toomics.com/en).</li>
+                <li>Under <strong>Request Headers</strong>, find <strong>Cookie</strong> and copy its whole value — everything after <code>Cookie:</code>, not the word itself.</li>
+                <li>Paste it into <strong>Session cookie</strong> below and click <strong>Save Changes</strong>.</li>
+              </ol>
+              <p className="section-hint">Treat it like a password: anyone with it is signed in as you. It stops working when you sign out of Toomics or the session expires — copy a fresh one then. Never paste it into issues, chats or logs.</p>
+            </details>
             <div className="form-row"><label htmlFor="toomics-cookie">Session cookie</label><input id="toomics-cookie" type="password" autoComplete="off" value={form.toomics_session_cookie || ""} onChange={e => setForm({ ...form, toomics_session_cookie: e.target.value })} /></div>
           </div>
           <SourceDownloadTest source="mangafire" label="MangaFire" />
