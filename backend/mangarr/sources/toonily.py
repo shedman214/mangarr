@@ -40,7 +40,9 @@ class ToonilySource(DirectSource):
         )
 
     async def _html(self, path: str, *, method: str = "GET", params: dict | None = None) -> BeautifulSoup:
-        response = await self.discovery_request(method, BASE_URL + path, limiter=_limiter, params=params)
+        # Toonily's own mature-content confirmation; without it mature titles are hidden.
+        headers = {"Cookie": "toonily-mature=1"} if self.adult_content else None
+        response = await self.discovery_request(method, BASE_URL + path, limiter=_limiter, params=params, headers=headers)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "lxml")
         if soup.title and any(text in soup.title.get_text().lower() for text in ("just a moment", "access denied")):

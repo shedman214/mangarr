@@ -40,6 +40,10 @@ DEFAULTS: dict[str, str] = {
     # (empty = the top source). Each series can still override both.
     "upgrades_allowed": "false",
     "upgrade_until": "",
+    # Off: each site's normal adult/mature filtering. On: MangaDex includes the
+    # pornographic rating, FanFox and Toonily get their over-18 confirmation and
+    # WeebCentral searches adult titles too. Off by default; the user opts in.
+    "adult_content": "false",
     # MangaDex credentials (personal API client)
     "mangadex_client_id": "",
     "mangadex_client_secret": "",
@@ -139,6 +143,8 @@ def validate(values: dict[str, str]) -> None:
     from urllib.parse import urlsplit
     from .permissions import parse
     parse(values)
+    if values.get("adult_content", "false") not in ("true", "false"):
+        raise ValueError("adult_content must be true or false")
     if values.get("upgrades_allowed", "false") not in ("true", "false"):
         raise ValueError("upgrades_allowed must be true or false")
     if values.get("upgrade_until", "") not in ("", *DISCOVERY_SOURCE_NAMES):

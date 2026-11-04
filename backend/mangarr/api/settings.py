@@ -144,6 +144,9 @@ async def update_settings(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     await settings_service.set_many(session, to_save)
+    # sources pick up proxy and Adult content changes right away
+    from ..sources import registry
+    await registry.apply_settings(session)
     # apply a changed monitor interval immediately (no restart needed)
     if "monitor_interval_minutes" in to_save:
         from ..jobs.scheduler import reschedule_monitor

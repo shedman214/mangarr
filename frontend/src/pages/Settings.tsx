@@ -16,6 +16,7 @@ import { BackupSettings } from "../components/BackupSettings";
 import { LoginSettings } from "../components/LoginSettings";
 import { LogSettings } from "../components/LogSettings";
 import { UpgradeSettings } from "../components/UpgradeSettings";
+import { AdultContentSettings } from "../components/AdultContentSettings";
 
 function RootFolders() {
   const queryClient = useQueryClient();
@@ -702,6 +703,7 @@ export default function Settings() {
             </p>
           </div>
           <SourcePriority form={form} setForm={setForm} />
+          <AdultContentSettings form={form} setForm={setForm} />
           <UpgradeSettings form={form} setForm={setForm} dirty={dirty}
             sources={orderedSourceNames(form).filter((name) => form[`source_${name}_enabled`] === "true")} />
           <SourceDownloadTest source="toonily" label="Toonily" />

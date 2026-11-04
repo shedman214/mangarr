@@ -68,6 +68,9 @@ class SourceNetwork:
     _client: httpx.AsyncClient
     discovery_proxy_enabled: bool = False
     discovery_proxy_url: str = ""
+    # Settings → Sources → Adult content: lift the site's own adult/mature
+    # filter where it has one (configured by registry.apply_settings).
+    adult_content: bool = False
 
     @asynccontextmanager
     async def discovery_client(self):

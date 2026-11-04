@@ -57,7 +57,9 @@ async def apply_settings(session: AsyncSession) -> dict[str, str]:
         language=values["mangadex_language"],
     )
     proxy_url = values["download_proxy_url"].strip()
+    adult = values.get("adult_content") == "true"
     for name, source in {**DIRECT_SOURCES, **TORRENT_INDEXERS}.items():
+        source.adult_content = adult
         source.discovery_proxy_enabled = values.get(f"source_{name}_discovery_proxy_enabled") == "true"
         source.discovery_proxy_url = proxy_url if source.discovery_proxy_enabled else ""
     for name, source in DIRECT_SOURCES.items():

@@ -58,6 +58,8 @@ class WeebCentralSource(DirectSource):
                 "order": "Descending",
                 "official": "Any",
                 "display_mode": "Full Display",
+                # without "adult" WeebCentral returns non-adult titles only
+                **({"adult": "Any"} if self.adult_content else {}),
             },
         )
         results = []

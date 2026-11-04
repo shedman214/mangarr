@@ -221,13 +221,17 @@ class MangaDexSource(DirectSource):
             records.extend(page.get("data") or [])
         return records
 
+    def _ratings(self) -> list[str]:
+        """MangaDex content ratings to request; pornographic only with Adult content on."""
+        return ["safe", "suggestive", "erotica", *(["pornographic"] if self.adult_content else [])]
+
     async def search_series(self, query: str) -> list[SourceSeries]:
         data = await self._get(
             "/manga",
             params={
                 "title": query,
                 "limit": 10,
-                "contentRating[]": ["safe", "suggestive", "erotica"],
+                "contentRating[]": self._ratings(),
                 "order[relevance]": "desc",
             },
         )
@@ -256,7 +260,7 @@ class MangaDexSource(DirectSource):
                     "offset": offset,
                     "translatedLanguage[]": [self._language],
                     "order[chapter]": "asc",
-                    "contentRating[]": ["safe", "suggestive", "erotica"],
+                    "contentRating[]": self._ratings(),
                     "includeExternalUrl": 0,  # skip chapters hosted off-site (unfetchable)
                     "includes[]": ["scanlation_group"],
                 },
@@ -304,7 +308,7 @@ class MangaDexSource(DirectSource):
             data = await self._get(f"/manga/{external_id}/feed", params={
                 "limit": 500, "offset": offset, "translatedLanguage[]": [self._language],
                 "order[chapter]": "asc",
-                "contentRating[]": ["safe", "suggestive", "erotica"], "includeExternalUrl": 1,
+                "contentRating[]": self._ratings(), "includeExternalUrl": 1,
             })
             page = data.get("data") or []
             rows.extend(page)

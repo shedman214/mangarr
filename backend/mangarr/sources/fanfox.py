@@ -43,6 +43,12 @@ class FanFoxSource(HtmlArchive):
     base_url = "https://fanfox.net"
     chapter_pattern = CHAPTER
 
+    async def request(self, path, **kwargs):
+        if self.adult_content:
+            # FanFox's own "I am over 18" confirmation; without it adult titles list one chapter.
+            kwargs["headers"] = {**kwargs.get("headers", {}), "Cookie": "isAdult=1"}
+        return await super().request(path, **kwargs)
+
     async def search_series(self, query):
         if not query.strip():
             return []
@@ -70,7 +76,7 @@ class FanFoxSource(HtmlArchive):
                 title=(title or anchor).get_text(" ", strip=True),
                 url=f"{self.base_url}/manga/{identifier}/1.html")
         if not chapters:
-            raise RuntimeError("FanFox returned no chapter links; check the series link, or the title may need FanFox's adult-content confirmation")
+            raise RuntimeError("FanFox returned no chapter links; check the series link, or turn on Settings → Sources → Adult content for adult titles")
         return sorted(chapters.values(), key=lambda c: (c.number, c.external_id))
 
     async def get_pages(self, chapter_external_id):

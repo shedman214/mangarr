@@ -397,6 +397,15 @@ an authenticating reverse proxy.
    seeders, and size. The selected release goes to qBittorrent under the
    `mangarr` category and is imported when complete.
 
+### Adult content
+
+**Settings → Sources → Adult content** is off by default. When you turn it on,
+searches and downloads include adult titles on sources that filter them:
+MangaDex adds its `pornographic` rating (search, chapter lists and chapter
+checks), FanFox and Toonily receive their own over-18 confirmation, and
+WeebCentral searches adult titles too. It applies as soon as you save. Toomics
+keeps using your own session's Family Safe setting.
+
 ### Upgrades (like Sonarr's "Upgrades Allowed" / "Upgrade Until")
 
 **Settings → Sources → Upgrades** sets the defaults for newly added series:

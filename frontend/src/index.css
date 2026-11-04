@@ -2726,3 +2726,8 @@ kbd {
 .upgrade-settings {
   margin-top: 18px;
 }
+
+/* Settings → Sources → Adult content */
+.adult-content-settings {
+  margin-top: 18px;
+}
