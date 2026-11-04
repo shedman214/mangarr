@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:6996",
       "/initialize.json": "http://localhost:6996",
+      "/auth": "http://localhost:6996",
     },
   },
   build: {

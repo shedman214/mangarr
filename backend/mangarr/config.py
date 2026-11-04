@@ -22,6 +22,9 @@ class AppConfig(BaseSettings):
     # Take a validated database backup before an upgrade changes tables or columns,
     # and refuse to upgrade if that backup fails. false skips it (not recommended).
     premigration_backup: bool = True
+    # Recovery switch for the optional built-in login (forgotten password):
+    # true ignores the login until it is set to false again.
+    login_disabled: bool = False
 
     @property
     def db_path(self) -> Path:

@@ -9,7 +9,7 @@ test run, not a review of the running Unraid installation.
 | - | ---- | ----- |
 | 1 | Fork-owned image, compose, template | Done: compose, Unraid template, CA profile, README and User-Agent point to `ghcr.io/shedman214/mangarr` / this repository |
 | 2 | Tests gate publishing | Done: `test-image.yml` publishes only after `tests.yml` passes |
-| 3 | Built-in login | Not started — design to be agreed first (changes network access) |
+| 3 | Built-in login | Done: optional single username/password (off by default); `/initialize.json` serves the key only to signed-in browsers; turning it on replaces the browser key |
 | 4 | Backup and restore | Done, including the automatic backup before database upgrades (`MANGARR_PREMIGRATION_BACKUP`) and a saved-backups list |
 | 5 | Source failures in the interface | Done: source status table, per-link check, search warnings |
 | 6 | Frontend behavior tests | Done: `npm test` (Vitest, jsdom) runs in CI; queue removal now asks for confirmation |

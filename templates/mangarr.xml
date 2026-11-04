@@ -22,5 +22,6 @@
   <Config Name="PUID" Target="PUID" Default="" Mode="" Description="Optional. User id to run as, e.g. 99 (nobody). Leave empty to run as root. Set together with PGID." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="PGID" Target="PGID" Default="" Mode="" Description="Optional. Group id to run as, e.g. 100 (users). Leave empty to run as root. Set together with PUID." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="UMASK" Target="UMASK" Default="" Mode="" Description="Optional. umask for new files and folders, e.g. 002 for 664/775." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Login disabled (recovery)" Target="MANGARR_LOGIN_DISABLED" Default="false" Mode="" Description="Leave false. Set true and restart only if you forgot the Settings → Login password; choose a new one, then set false again." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
   <Config Name="Manga Library" Target="/manga" Default="/mnt/user/media/manga" Mode="rw" Description="Bind the image-declared /manga volume to the same manga library folder." Type="Path" Display="advanced" Required="true" Mask="false"/>
 </Container>

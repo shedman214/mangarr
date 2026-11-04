@@ -1,12 +1,42 @@
 let apiKey = "";
 let version = "";
+let loginEnabled = false;
+
+/** initialize.json refused: the optional login is on and this browser is not signed in. */
+export class LoginRequiredError extends Error {}
 
 export async function initClient(): Promise<void> {
   const resp = await fetch("/initialize.json");
+  if (resp.status === 401) throw new LoginRequiredError("Sign in to continue");
   if (!resp.ok) throw new Error("Cannot reach mangarr backend");
   const data = await resp.json();
   apiKey = data.apiKey;
   version = data.version;
+  loginEnabled = Boolean(data.login);
+}
+
+/** Turning login on replaces the browser key; keep using the new one. */
+export function setApiKey(key: string): void {
+  apiKey = key;
+}
+
+export function isLoginEnabled(): boolean {
+  return loginEnabled;
+}
+
+export async function signIn(username: string, password: string): Promise<void> {
+  const resp = await fetch("/auth/login", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }),
+  });
+  if (!resp.ok) {
+    let detail = "Sign-in failed";
+    try { detail = (await resp.json()).detail || detail; } catch { /* not json */ }
+    throw new Error(detail);
+  }
+}
+
+export async function signOut(): Promise<void> {
+  await fetch("/auth/logout", { method: "POST" });
 }
 
 export function appVersion(): string {

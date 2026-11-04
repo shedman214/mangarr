@@ -2,12 +2,13 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .api import (
+    auth as auth_routes,
     backups,
     apikeys,
     calendar,
@@ -64,18 +65,24 @@ api.include_router(search.router)
 api.include_router(queue.router)
 api.include_router(settings.router)
 api.include_router(backups.router)
+api.include_router(auth_routes.router)
 api.include_router(apikeys.router)
 api.include_router(system.router)
 app.mount("/api/v1", api)
+app.include_router(auth_routes.public)
 
 
 @app.get("/initialize.json")
-async def initialize():
+async def initialize(request: Request):
     """Bootstrap info for the web UI, mirroring how the *arr apps hand their
-    UI the API key. NOTE: this is readable by anyone who can reach the port —
-    the API key gates scripted access, not the trusted LAN. Put a reverse
-    proxy with auth in front if the network isn't trusted."""
-    return {"apiKey": get_api_key(), "version": __version__, "urlBase": ""}
+    UI the API key. Without the optional login (Settings → Login) this is
+    readable by anyone who can reach the port; with it, only by a browser
+    with a valid session."""
+    from . import auth
+    if auth.enabled() and not auth.valid_session(request.cookies.get(auth.COOKIE)):
+        # With login on, the key (and so the API) is only handed to a signed-in browser.
+        return JSONResponse({"detail": "Login required", "loginRequired": True, "version": __version__}, status_code=401)
+    return {"apiKey": get_api_key(), "version": __version__, "urlBase": "", "login": auth.enabled()}
 
 
 @app.get("/ping")

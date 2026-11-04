@@ -1,3 +1,5 @@
+import os
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, Header, HTTPException
@@ -16,6 +18,21 @@ def get_api_key() -> str:
     if _api_key is None:
         _api_key = config.resolve_api_key()
     return _api_key
+
+
+def replace_bootstrap_key() -> str:
+    """Issue a new web UI key, so copies handed out before login was turned on
+    stop working. A fixed MANGARR_API_KEY cannot be replaced from here."""
+    global _api_key
+    if config.api_key:
+        return get_api_key()
+    key = secrets.token_hex(16)
+    path = config.data_dir / "api_key"
+    temp = path.with_name(f".api_key-{secrets.token_hex(4)}.tmp")
+    temp.write_text(key)
+    os.replace(temp, path)
+    _api_key = key
+    return key
 
 
 def _as_utc(value: datetime) -> datetime:

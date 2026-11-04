@@ -13,6 +13,7 @@ import { SOURCE_LABELS } from "../sources";
 import { PermissionsSettings } from "../components/PermissionsSettings";
 import { SourceStatus } from "../components/SourceStatus";
 import { BackupSettings } from "../components/BackupSettings";
+import { LoginSettings } from "../components/LoginSettings";
 
 function RootFolders() {
   const queryClient = useQueryClient();
@@ -627,6 +628,7 @@ export default function Settings() {
         <ErrorNotice error={loadError} retry={() => void retryLoad()} />
         <ErrorNotice error={save.error} />
         <RootFolders />
+        <LoginSettings />
         <BackupSettings />
         <PermissionsSettings form={form} setForm={setForm} dirty={dirty} />
         <ApiKeys />

@@ -2669,3 +2669,38 @@ kbd {
     transition: none;
   }
 }
+
+/* Sign-in page (optional built-in login) */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px 24px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.login-card h2 {
+  margin: 0 0 4px;
+}
+
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-card input {
+  padding: 8px 10px;
+}

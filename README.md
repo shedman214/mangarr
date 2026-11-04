@@ -297,6 +297,7 @@ Environment variables (all optional):
 | `MANGARR_DATA_DIR`   | `data`        | SQLite DB, API key, cached settings               |
 | `MANGARR_SQLITE_WAL` | `true`        | Use SQLite WAL mode (see below)                   |
 | `MANGARR_PREMIGRATION_BACKUP` | `true` | Back up the database before an upgrade changes its layout (see Backup and restore) |
+| `MANGARR_LOGIN_DISABLED` | `false` | Ignore the built-in login (recovery from a forgotten password; see Login) |
 | `MANGARR_LOG_LEVEL`  | `INFO`        | Log level (uppercase: `DEBUG`, `INFO`, `WARNING`) |
 | `MANGARR_API_KEY`    | *(generated)* | Fixed web UI API key instead of a generated one   |
 
@@ -335,6 +336,33 @@ handed to the UI via `GET /initialize.json`. To give external clients (e.g.
 NextPanel or scripts) their own keys, create named keys under **Settings → API
 Keys**; any of them authenticates `/api/v1` calls via `X-Api-Key` and can be
 revoked independently.
+
+## Login
+
+Login is off by default: anyone who can reach the port can open the web UI,
+because `/initialize.json` hands it the API key. **Settings → Login** turns on
+a single username and password. While it is on:
+
+- `/initialize.json` returns the key only to a browser signed in through the
+  login page (an HttpOnly, SameSite=Strict session cookie valid for 30 days;
+  marked Secure over HTTPS, including behind a proxy sending
+  `X-Forwarded-Proto: https`). Everyone else gets the sign-in page.
+- Turning login on replaces the generated browser key, so copies handed out
+  earlier stop working. Scripts and apps should use keys from **Settings → API
+  Keys**, which keep working. A fixed `MANGARR_API_KEY` cannot be replaced, and
+  anyone who knows it can still use the API; Settings warns about this.
+- Changing the password or turning login off requires the current password, and
+  signs out every other browser. Five failed sign-ins from one address within
+  15 minutes block further attempts for a minute.
+- The password is stored as an scrypt hash in `<data dir>/auth.json` (mode
+  0600) with the session list. It is not part of the settings API or backups,
+  so restoring a backup does not change the login.
+
+Forgot the password? Set `MANGARR_LOGIN_DISABLED=true`, restart, choose a new
+password in Settings → Login, then remove the variable and restart again.
+Deleting `auth.json` and restarting also turns login off. `/ping` stays public
+for health checks. For access from outside your network, still prefer a VPN or
+an authenticating reverse proxy.
 
 ## How grabbing works
 
