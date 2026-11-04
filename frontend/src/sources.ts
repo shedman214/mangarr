@@ -10,6 +10,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   asura: "Asura Scans",
   toonily: "Toonily (experimental)",
   mangakatana: "MangaKatana (experimental)",
+  fanfox: "FanFox / MangaFox (experimental)",
   manganato: "Manganato.gg (experimental)",
   toomics: "Toomics (experimental, free episodes)",
   viz: "VIZ (official metadata)",

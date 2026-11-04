@@ -8,6 +8,7 @@ from .base import DirectSource, TorrentIndexer
 from .asura import source as asura_source
 from .toonily import source as toonily_source
 from .mangakatana import source as mangakatana_source
+from .fanfox import source as fanfox_source
 from .manganato import source as manganato_source
 from .toomics import source as toomics_source
 from .atsumaru import source as atsumaru_source
@@ -32,6 +33,7 @@ DIRECT_SOURCES: dict[str, DirectSource] = {
     asura_source.name: asura_source,
     toonily_source.name: toonily_source,
     mangakatana_source.name: mangakatana_source,
+    fanfox_source.name: fanfox_source,
     manganato_source.name: manganato_source,
     toomics_source.name: toomics_source,
     viz_source.name: viz_source,

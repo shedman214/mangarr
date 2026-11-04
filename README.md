@@ -496,13 +496,21 @@ same version through Settings; startup then upgrades it again.
 
 ## Additional experimental sources
 
-MangaKatana, Manganato.gg, and English Toomics are opt-in sources in Settings.
+MangaKatana, FanFox (MangaFox), Manganato.gg, and English Toomics are opt-in sources in Settings.
 Each has separate discovery and content proxy controls and accepts manual series
 links. Existing source priorities and proxy settings are preserved.
 
 - MangaKatana: title search, chapter lists including decimals, ordered reader
   images, and chapter-specific image Referer. A local live Red Blue check found
   213 chapters, 36 chapter-one pages, and downloaded the first image successfully.
+- FanFox (MangaFox): title search, chapter lists with volumes and decimals, and
+  every page of a chapter from the public desktop reader. The reader's packed
+  scripts are decoded as text, never executed; images use the chapter page as
+  Referer. Series links from fanfox.net and m.fanfox.net are accepted. Checked live
+  from the Unraid server on 2026-11-04: search, a 469-chapter list (1–240 with
+  decimals and volumes) and a full 12-page chapter download. FanFox's mobile site
+  shows "licensed and not available" for some titles while its desktop reader
+  still serves them; Mangarr uses whatever the desktop reader serves.
 - Manganato.gg: paginated chapter API (no 50-chapter cutoff), decimal chapter
   numbers, title search, and reader images. Live Red Blue chapter lookup found
   215 entries including decimals. Search and CDN download returned HTTP 403 from

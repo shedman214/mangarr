@@ -10,6 +10,8 @@ from .base import SourceSeries
 _ROUTES = {
     "toomics.com": ("toomics", r"/en/webtoon/episode/toon/([0-9]+)"),
     "mangakatana.com": ("mangakatana", r"/manga/([A-Za-z0-9_-]+\.[0-9]+)"),
+    "fanfox.net": ("fanfox", r"/manga/([A-Za-z0-9_]+)"),
+    "m.fanfox.net": ("fanfox", r"/manga/([A-Za-z0-9_]+)"),
     "manganato.gg": ("manganato", r"/manga/([A-Za-z0-9_-]+)"),
     "toonily.com": ("toonily", r"/serie/([A-Za-z0-9_-]+)"),
     "mangafire.to": ("mangafire", r"/title/([A-Za-z0-9]+)(?:-([A-Za-z0-9-]+))?"),

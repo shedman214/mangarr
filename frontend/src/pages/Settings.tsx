@@ -179,6 +179,7 @@ function ApiKeys() {
 const SOURCE_HINTS: Record<string, string> = {
   toomics: "Experimental English source. Free episodes only; uses your own session’s Family Safe setting.",
   mangakatana: "Experimental archive source; supports series links and decimal chapters.",
+  fanfox: "Experimental: FanFox (MangaFox) public reader; series links, volumes and decimal chapters.",
   manganato: "Experimental Manganato.gg source; loads all chapter-list pages.",
   toonily: "Experimental manhwa source. Image downloads send the chapter page as Referer; availability depends on your network.",
   mangaplus: "Official same-day Shonen Jump. Needs a residential IP — bans datacenters.",
@@ -201,6 +202,7 @@ const CONTENT_SOURCES = new Set([
   "asura",
   "toonily",
   "mangakatana",
+  "fanfox",
   "manganato",
   "toomics",
 ]);

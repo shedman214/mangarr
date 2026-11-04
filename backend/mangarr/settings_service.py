@@ -16,6 +16,7 @@ CONTENT_SOURCE_NAMES = (
     "asura",
     "toonily",
     "mangakatana",
+    "fanfox",
     "manganato",
     "toomics",
 )
@@ -76,6 +77,7 @@ DEFAULTS: dict[str, str] = {
     # Experimental until verified from the user's server/network.
     "source_toonily_enabled": "false",
     "source_mangakatana_enabled": "false",
+    "source_fanfox_enabled": "false",
     "source_manganato_enabled": "false",
     "source_toomics_enabled": "false",
     "toomics_session_cookie": "",
