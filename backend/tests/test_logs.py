@@ -59,6 +59,29 @@ def test_levels_control_mangarr_and_noisy_libraries():
     assert logs.environment_level("Debug") == "debug"
 
 
+def test_complete_credential_values_and_overlapping_secrets_are_redacted():
+    logs.set_secrets(["shared-secret", "shared-secret-with-suffix"])
+    for raw, forbidden in [
+        ("Cookie: first=one; second=two", ["one", "two"]),
+        ("headers {'Cookie': 'first=one; second=two', 'Accept': 'json'}", ["one", "two"]),
+        ('payload {"password": "multiple secret words"}', ["multiple", "secret words"]),
+        (r'payload {"password": "multiple \"quoted\" secret words"}', ["multiple", "secret words"]),
+        ('password="quoted secret words"', ["quoted", "secret words"]),
+        ("proxy http://credential-only@server/", ["credential-only"]),
+        ("value shared-secret-with-suffix", ["shared-secret", "-with-suffix"]),
+    ]:
+        redacted = logs.redact(raw)
+        assert logs.MASK in redacted
+        assert not any(value in redacted for value in forbidden)
+
+
+def test_tail_redacts_secrets_learned_after_writing(tmp_path):
+    logs.setup(tmp_path, "info")
+    logging.getLogger("mangarr.test").info("late value: %s", "learned-later-value")
+    logs.add_secrets(["learned-later-value"])
+    assert "learned-later-value" not in "\n".join(logs.tail())
+
+
 def test_file_is_redacted_tailed_rotated_and_archived(tmp_path, monkeypatch):
     monkeypatch.setattr(logs, "MAX_BYTES", 2000)
     logs.setup(tmp_path, "trace")

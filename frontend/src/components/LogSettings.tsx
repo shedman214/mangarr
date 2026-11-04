@@ -34,7 +34,7 @@ export function LogSettings() {
   const total = (state.data?.files || []).reduce((sum, f) => sum + f.bytes, 0);
   return <section className="settings-section" aria-label="Logs">
     <h3>Logs</h3>
-    <p className="section-hint">Mangarr writes its log to /config/logs/mangarr.txt (5 files of up to 5 MB, oldest removed first) and to the container log. API keys, passwords, tokens, cookies and proxy credentials are replaced with &lt;redacted&gt; before anything is written, so a downloaded log is safe to share for troubleshooting — still glance through it before posting it publicly.</p>
+    <p className="section-hint">Mangarr writes its log to /config/logs/mangarr.txt (5 files of up to 5 MB, oldest removed first) and to the container log. Known secrets and common credential fields are replaced with &lt;redacted&gt;. Logs can still include library paths, titles and server addresses. Review a downloaded log before sharing it.</p>
     <div className="form-row">
       <label htmlFor="log-level">Log level</label>
       <select id="log-level" value={level || ""} disabled={!level || setLevel.isPending} onChange={e => setLevel.mutate(e.target.value as Level)}>

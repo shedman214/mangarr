@@ -12,6 +12,8 @@ import logging.handlers
 import re
 import threading
 import zipfile
+from contextlib import nullcontext
+from functools import wraps
 from pathlib import Path
 
 TRACE = 5
@@ -25,9 +27,9 @@ FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 
 # Query/form parameters and header-like "name: value" pairs whose values are secrets.
 _SECRET_NAMES = r"api[_-]?key|apikey|x-api-key|token|access[_-]?token|refresh[_-]?token|password|passwd|secret|client[_-]?secret|authorization|cookie|session"
-_PARAM = re.compile(rf"(?i)\b({_SECRET_NAMES})(=|%3D)([^&\s\"'#]+)")
-_HEADER = re.compile(rf"(?i)\b({_SECRET_NAMES})([\"']?\s*:\s*[\"']?)(bearer\s+|basic\s+)?([^\s\"',}}]+)")
-_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@")
+_PARAM = re.compile(rf"""(?i)\b({_SECRET_NAMES})(=|%3D)(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^&\s"'#]+)""")
+_HEADER = re.compile(rf"""(?i)\b({_SECRET_NAMES})(["']?\s*:\s*)(?:"((?:\\.|[^"\\\r\n])*)"|'((?:\\.|[^'\\\r\n])*)'|([^\r\n,}}]+))""")
+_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s@]+@")
 
 _lock = threading.Lock()
 _secrets: frozenset[str] = frozenset()
@@ -37,12 +39,18 @@ _level = "info"
 
 
 def redact(text: str) -> str:
-    for value in _secrets:
+    for value in sorted(_secrets, key=len, reverse=True):
         if value in text:
             text = text.replace(value, MASK)
     text = _USERINFO.sub(rf"\1{MASK}@", text)
     text = _PARAM.sub(lambda m: f"{m.group(1)}{m.group(2)}{MASK}", text)
-    return _HEADER.sub(lambda m: f"{m.group(1)}{m.group(2)}{m.group(3) or ''}{MASK}", text)
+    def header(match):
+        quote = '"' if match.group(3) is not None else "'" if match.group(4) is not None else ""
+        value = next(v for v in match.groups()[2:] if v is not None)
+        scheme = re.match(r"(?i)^(bearer\s+|basic\s+)", value)
+        prefix = scheme.group() if scheme else ""
+        return f"{match.group(1)}{match.group(2)}{quote}{prefix}{MASK}{quote}"
+    return _HEADER.sub(header, text)
 
 
 class RedactingFormatter(logging.Formatter):
@@ -154,6 +162,18 @@ def _files() -> list[Path]:
     return [p for p in (_log_dir / n for n in names) if p.is_file()]
 
 
+def _read_snapshot(function):
+    @wraps(function)
+    def read(*args, **kwargs):
+        handler = _file_handler
+        # RotatingFileHandler uses this same reentrant lock while writing.
+        # Keep its filenames stable throughout a view or archive request.
+        with handler.lock if handler is not None else nullcontext():
+            return function(*args, **kwargs)
+    return read
+
+
+@_read_snapshot
 def files() -> list[dict]:
     out = []
     for path in _files():
@@ -162,6 +182,7 @@ def files() -> list[dict]:
     return out
 
 
+@_read_snapshot
 def tail(lines: int = 300) -> list[str]:
     """Last ``lines`` lines of the current log file (reads at most 2 MB)."""
     paths = _files()
@@ -177,9 +198,10 @@ def tail(lines: int = 300) -> list[str]:
     result = data.splitlines()
     if size > 2 * 1024 * 1024:
         result = result[1:]  # first line is probably cut in half
-    return result[-lines:]
+    return [redact(line) for line in result[-lines:]]
 
 
+@_read_snapshot
 def archive() -> bytes:
     """ZIP of the current and rotated log files. Re-redacted with the current
     secrets, so values saved after a line was written are masked too."""

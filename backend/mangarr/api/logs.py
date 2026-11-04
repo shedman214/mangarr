@@ -37,7 +37,8 @@ async def _source(session: AsyncSession) -> str:
 
 
 @router.get("")
-async def get_logs(lines: int = Query(300, ge=1, le=2000), session: AsyncSession = Depends(get_session)):
+async def get_logs(response: Response, lines: int = Query(300, ge=1, le=2000), session: AsyncSession = Depends(get_session)):
+    response.headers["Cache-Control"] = "no-store"
     return {
         "level": logs.current_level(),
         "source": await _source(session),
