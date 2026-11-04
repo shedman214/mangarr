@@ -10,6 +10,11 @@ from ..util import RateLimiter, rl_request
 from .base import DirectSource
 
 
+def _blocked(response):
+    """Cloudflare's bot protection: 403/503 from a cloudflare server."""
+    return response.status_code in (403, 503) and "cloudflare" in response.headers.get("server", "").lower()
+
+
 class HtmlArchive(DirectSource):
     base_url: str
     chapter_pattern: str
@@ -22,6 +27,9 @@ class HtmlArchive(DirectSource):
 
     async def request(self, path, **kwargs):
         response = await self.discovery_request("GET", self.base_url + path, limiter=self.limiter, **kwargs)
+        if _blocked(response):
+            raise RuntimeError(f"{self.name} is blocking Mangarr's requests (Cloudflare {response.status_code}); "
+                               "this source is not usable from your network right now")
         response.raise_for_status()
         return response
 
@@ -64,5 +72,8 @@ class HtmlArchive(DirectSource):
         if not self.identifier(referer, self.chapter_pattern):
             raise ValueError("Missing or invalid chapter Referer")
         response = await rl_request(client, "GET", actual, limiter=self.image_limiter, headers={"User-Agent": USER_AGENT, "Referer": referer})
+        if _blocked(response):
+            raise RuntimeError(f"{self.name}'s image server is blocking Mangarr (Cloudflare {response.status_code}); "
+                               "chapters from this source cannot be downloaded from your network right now")
         response.raise_for_status()
         return response.content

@@ -94,3 +94,28 @@ def test_new_sources_are_opt_in_with_independent_proxy_settings():
         assert settings_service.DEFAULTS[f"source_{name}_proxy_enabled"] == "false"
         assert settings_service.DEFAULTS[f"source_{name}_discovery_proxy_enabled"] == "false"
     assert "toomics_session_cookie" in settings_service.SECRET_KEYS
+
+
+@pytest.mark.parametrize("status", [403, 503])
+async def test_cloudflare_blocks_are_reported_plainly(status):
+    def handler(request):
+        return httpx.Response(status, headers={"server": "cloudflare"}, text="Attention Required")
+    s = source(ManganatoSource, handler)
+    try:
+        with pytest.raises(RuntimeError, match=f"blocking Mangarr's requests \\(Cloudflare {status}\\)"):
+            await s.search_series("red blue")
+        page = "https://img.example/1.webp#" + "mangarr_referer=https%3A%2F%2Fwww.manganato.gg%2Fmanga%2Fred-blue%2Fchapter-1"
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            with pytest.raises(RuntimeError, match="image server is blocking Mangarr"):
+                await s.download_page(client, page)
+    finally:
+        await s._client.aclose()
+
+
+async def test_other_errors_are_unchanged():
+    s = source(ManganatoSource, lambda request: httpx.Response(404, text="missing"))
+    try:
+        with pytest.raises(httpx.HTTPStatusError):
+            await s.search_series("red blue")
+    finally:
+        await s._client.aclose()

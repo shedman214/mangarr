@@ -521,16 +521,26 @@ links. Existing source priorities and proxy settings are preserved.
   shows "licensed and not available" for some titles while its desktop reader
   still serves them; Mangarr uses whatever the desktop reader serves.
 - Manganato.gg: paginated chapter API (no 50-chapter cutoff), decimal chapter
-  numbers, title search, and reader images. Live Red Blue chapter lookup found
-  215 entries including decimals. Search and CDN download returned HTTP 403 from
-  the test network; this source is experimental and not verified end to end.
+  numbers, title search, and reader images. Rechecked from the Unraid server on
+  2026-11-04: chapter lists and page lists work (Red Blue: 215 chapters, 39
+  pages), but Cloudflare blocks the search endpoint and the image server (HTTP
+  403), also through a VPN proxy. Mangarr does not disguise itself to get past
+  that, so this source cannot download; Settings and errors now say so plainly.
 - Toomics: English series links, search parser, explicit free episodes only, and
   reader images. VIP/coin episodes are excluded. An optional masked session-cookie
   setting uses the user's existing Toomics session. To use Family Safe off,
   complete age verification and disable it on the Toomics website first. Mangarr
   does not bypass verification or paid access. HTTP requests returned 404 from the
-  test network despite working browser pages; live search/download remain unverified.
+  test network despite working browser pages. Rechecked from the Unraid server on
+  2026-11-04: a pasted series link works — free episode list, page list and image
+  downloads succeeded. Search does not: Toomics now loads results from its own
+  search database with credentials handed to the browser, which Mangarr does not
+  use. Add Toomics series by pasting their link under Edit sources.
   Never paste session cookies into issues or logs.
+
+Toonily side stories (links such as `/side-story-1/`) are deliberately not
+imported: other sources number the same side stories differently (for example
+MangaFire as 179.1–179.7), so importing them would download duplicates.
 
 These adapters have local parser/routing tests. Unraid network verification is
 still required before treating the experimental sources as fully working.
