@@ -219,7 +219,19 @@ async def get_all(session: AsyncSession) -> dict[str, str]:
         values["source_mangafire_discovery_proxy_enabled"] = values["mangafire_discovery_proxy_enabled"]
     from .permissions import configure
     configure(values)
+    await _refresh_log_secrets(session, values)
     return values
+
+
+async def _refresh_log_secrets(session: AsyncSession, values: dict[str, str]) -> None:
+    """Mask saved secrets and every API key in logs and log downloads."""
+    from . import logs
+    from .api import deps
+    from .models import ApiKey
+    keys = (await session.execute(select(ApiKey.key))).scalars().all()
+    # Only an already-loaded browser key: loading it here could create the key file.
+    browser = [deps._api_key] if deps._api_key else []
+    logs.set_secrets([values.get(k, "") for k in SECRET_KEYS] + list(keys) + browser)
 
 
 async def get(session: AsyncSession, key: str) -> str:

@@ -14,6 +14,7 @@ import { PermissionsSettings } from "../components/PermissionsSettings";
 import { SourceStatus } from "../components/SourceStatus";
 import { BackupSettings } from "../components/BackupSettings";
 import { LoginSettings } from "../components/LoginSettings";
+import { LogSettings } from "../components/LogSettings";
 
 function RootFolders() {
   const queryClient = useQueryClient();
@@ -630,6 +631,7 @@ export default function Settings() {
         <RootFolders />
         <LoginSettings />
         <BackupSettings />
+        <LogSettings />
         <PermissionsSettings form={form} setForm={setForm} dirty={dirty} />
         <ApiKeys />
 

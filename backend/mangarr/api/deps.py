@@ -33,6 +33,8 @@ def replace_bootstrap_key() -> str:
         handle.write(key)
     os.replace(temp, path)
     _api_key = key
+    from .. import logs
+    logs.add_secrets([key])
     return key
 
 

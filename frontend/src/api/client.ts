@@ -80,6 +80,12 @@ export const api = {
     if (!resp.ok) throw new Error("Backup download failed");
     return resp.blob();
   },
+  logsDownload: async () => {
+    const resp = await fetch("/api/v1/system/logs/download", { headers: { "X-Api-Key": apiKey } });
+    if (!resp.ok) throw new Error("Log download failed");
+    const name = /filename="([^"]+)"/.exec(resp.headers.get("Content-Disposition") || "")?.[1] || "mangarr-logs.zip";
+    return { blob: await resp.blob(), name };
+  },
   restoreUpload: async (file: File) => {
     const resp = await fetch("/api/v1/settings/backups/restore", { method: "POST", headers: { "X-Api-Key": apiKey, "Content-Type": "application/zip" }, body: file });
     if (!resp.ok) {

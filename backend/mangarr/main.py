@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__
 from .api import (
     auth as auth_routes,
+    logs as log_routes,
     backups,
     apikeys,
     calendar,
@@ -26,10 +27,10 @@ from .config import config
 from .db import init_db, session_scope
 from .jobs import scheduler
 
-logging.basicConfig(
-    level=config.log_level,
-    format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-)
+from . import logs
+
+# Console only at import; the log file is added at startup (see lifespan).
+logs.setup(None, logs.environment_level(config.log_level))
 log = logging.getLogger("mangarr")
 
 
@@ -37,6 +38,7 @@ log = logging.getLogger("mangarr")
 async def lifespan(app: FastAPI):
     import asyncio
     from .backups import pre_migration_backup, restore_pending
+    logs.setup(config.data_dir, logs.environment_level(config.log_level))
     await asyncio.to_thread(restore_pending, config.data_dir)
     if config.premigration_backup:
         # Refuses to start (and so to migrate) if the safety copy fails; MANGARR_PREMIGRATION_BACKUP=false skips it.
@@ -44,9 +46,12 @@ async def lifespan(app: FastAPI):
         if saved:
             log.info("Saved pre-migration backup %s before updating the database (%d change(s))", saved["id"], len(saved["changes"]))
     await init_db()
+    get_api_key()  # load (or create) the browser key so logs can mask it
     from . import settings_service
     async with session_scope() as session:
         await settings_service.get_all(session)
+        from .api.logs import apply_saved_level
+        await apply_saved_level(session)
     await scheduler.start()
     log.info("Mangarr %s ready on %s:%d", __version__, config.host, config.port)
     yield
@@ -66,6 +71,7 @@ api.include_router(queue.router)
 api.include_router(settings.router)
 api.include_router(backups.router)
 api.include_router(auth_routes.router)
+api.include_router(log_routes.router)
 api.include_router(apikeys.router)
 api.include_router(system.router)
 app.mount("/api/v1", api)
@@ -117,7 +123,8 @@ else:
 def run() -> None:
     import uvicorn
 
-    uvicorn.run("mangarr.main:app", host=config.host, port=config.port, log_level="info")
+    # log_config=None: uvicorn's loggers use Mangarr's redacting handlers and levels.
+    uvicorn.run("mangarr.main:app", host=config.host, port=config.port, log_config=None)
 
 
 if __name__ == "__main__":

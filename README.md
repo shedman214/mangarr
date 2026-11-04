@@ -298,7 +298,7 @@ Environment variables (all optional):
 | `MANGARR_SQLITE_WAL` | `true`        | Use SQLite WAL mode (see below)                   |
 | `MANGARR_PREMIGRATION_BACKUP` | `true` | Back up the database before an upgrade changes its layout (see Backup and restore) |
 | `MANGARR_LOGIN_DISABLED` | `false` | Ignore the built-in login (recovery from a forgotten password; see Login) |
-| `MANGARR_LOG_LEVEL`  | `INFO`        | Log level (uppercase: `DEBUG`, `INFO`, `WARNING`) |
+| `MANGARR_LOG_LEVEL`  | `INFO`        | Starting log level: `INFO`, `DEBUG` or `TRACE` (a level chosen in Settings → Logs takes priority) |
 | `MANGARR_API_KEY`    | *(generated)* | Fixed web UI API key instead of a generated one   |
 
 `MANGARR_HOST` and `MANGARR_PORT` apply when Mangarr is started with
@@ -336,6 +336,22 @@ handed to the UI via `GET /initialize.json`. To give external clients (e.g.
 NextPanel or scripts) their own keys, create named keys under **Settings → API
 Keys**; any of them authenticates `/api/v1` calls via `X-Api-Key` and can be
 revoked independently.
+
+## Logs
+
+**Settings → Logs** shows the most recent log lines, downloads all log files as
+one ZIP, and sets the level (applied immediately, remembered across restarts):
+
+- **Info** (default): Mangarr's own messages — downloads, imports, warnings, errors.
+- **Debug**: adds Mangarr's detailed steps, web UI requests and scheduled job runs.
+- **Trace**: adds one line per outgoing web request (sources, Kavita, proxies).
+
+Logs are written to the container log and to `<data dir>/logs/mangarr.txt`
+(rotated at 5 MB, five files kept). Saved secrets, API keys, passwords, tokens,
+cookies, `Authorization` values and `user:password@` in URLs are replaced with
+`<redacted>` before anything is written, and the download is checked again with
+the current secrets. Third-party libraries stay at Info, so Debug does not fill
+the log with database driver output.
 
 ## Login
 
