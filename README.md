@@ -397,6 +397,22 @@ an authenticating reverse proxy.
    seeders, and size. The selected release goes to qBittorrent under the
    `mangarr` category and is imported when complete.
 
+### Upgrades (like Sonarr's "Upgrades Allowed" / "Upgrade Until")
+
+**Settings → Sources → Upgrades** sets the defaults for newly added series:
+
+- **Upgrades allowed** — when on, a downloaded chapter is downloaded again when a
+  source higher in the priority list has it, or when its file is from a blocked
+  scanlation group. Off by default.
+- **Upgrade until** — once a chapter's file comes from this source or a better
+  one, it is not downloaded again (default: the top source).
+- **Apply to all series** sets every existing series to the saved values (after a
+  confirmation); each series can still be changed under its Automation settings.
+
+Only chapter files Mangarr downloaded itself from a direct source are replaced.
+Files you added, torrent imports and volume archives are never touched. Upgrades
+are queued during the normal monitor passes, at most 25 per series per pass.
+
 Please be a good citizen: keep the honest User-Agent, don't lower the rate
 limits, and use a MangaDex account so their team can see the traffic is
 legitimate.

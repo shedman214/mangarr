@@ -33,6 +33,12 @@ DEFAULTS: dict[str, str] = {
     # Official sources first, then fast scanlation sources (tcbscans) ahead
     # of archive sources so new chapters are grabbed as soon as they appear.
     "source_priority": "mangaplus,webtoons,tcbscans,mangadex,mangafire,weebcentral,atsumaru,asura,toonily,viz,wikipedia,nyaa",
+    # Defaults for newly added series (like Sonarr's "Upgrades Allowed" /
+    # "Upgrade Until"): re-grab a downloaded chapter when a higher-priority
+    # source has it, until the file comes from upgrade_until or better
+    # (empty = the top source). Each series can still override both.
+    "upgrades_allowed": "false",
+    "upgrade_until": "",
     # MangaDex credentials (personal API client)
     "mangadex_client_id": "",
     "mangadex_client_secret": "",
@@ -131,6 +137,10 @@ def validate(values: dict[str, str]) -> None:
     from urllib.parse import urlsplit
     from .permissions import parse
     parse(values)
+    if values.get("upgrades_allowed", "false") not in ("true", "false"):
+        raise ValueError("upgrades_allowed must be true or false")
+    if values.get("upgrade_until", "") not in ("", *DISCOVERY_SOURCE_NAMES):
+        raise ValueError("upgrade_until must be empty (top source) or a known source")
     cookie = values.get("toomics_session_cookie", "")
     if "\r" in cookie or "\n" in cookie or len(cookie) > 16384:
         raise ValueError("Invalid Toomics session cookie")

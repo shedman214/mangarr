@@ -138,7 +138,12 @@ async def create_series(
     if meta is None:
         raise MetadataNotFound(f"{provider.name} series not found")
     alt_titles = unique_titles([*meta.alt_titles, opts.english_title, *opts.alt_titles])
+    from . import settings_service
+    upgrades = await settings_service.get(session, "upgrades_allowed") == "true"
+    upgrade_until = await settings_service.get(session, "upgrade_until")
     series = Series(
+        upgrades_enabled=upgrades,
+        upgrade_cutoff=upgrade_until,
         anilist_id=anilist_id,
         mangaupdates_id=mangaupdates_id,
         title=meta.title,

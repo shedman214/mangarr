@@ -199,3 +199,34 @@ async def qbt_test(body: QbtTestIn, session: AsyncSession = Depends(get_session)
     except QbtError as exc:
         raise HTTPException(400, str(exc)) from exc
     return {"ok": True, "version": version}
+
+
+@router.get("/upgrades")
+async def upgrade_summary(session: AsyncSession = Depends(get_session)):
+    """How many series follow the saved Upgrades Allowed / Upgrade Until defaults."""
+    allowed = await settings_service.get(session, "upgrades_allowed") == "true"
+    until = await settings_service.get(session, "upgrade_until")
+    rows = (await session.execute(select(Series.upgrades_enabled, Series.upgrade_cutoff))).all()
+    return {
+        "series": len(rows),
+        "upgrades_on": sum(1 for enabled, _ in rows if enabled),
+        "matching": sum(1 for enabled, cutoff in rows
+                        if bool(enabled) == allowed and (not allowed or (cutoff or "") == until)),
+    }
+
+
+@router.post("/upgrades/apply")
+async def apply_upgrades_to_all(session: AsyncSession = Depends(get_session)):
+    """Set every series' upgrade switch and cutoff to the saved defaults. Upgrades
+    then happen through the normal monitor passes (a limited number per pass)."""
+    allowed = await settings_service.get(session, "upgrades_allowed") == "true"
+    until = await settings_service.get(session, "upgrade_until")
+    changed = 0
+    for series in (await session.execute(select(Series))).scalars():
+        cutoff = until if allowed else series.upgrade_cutoff
+        if series.upgrades_enabled != allowed or series.upgrade_cutoff != cutoff:
+            series.upgrades_enabled = allowed
+            series.upgrade_cutoff = cutoff
+            changed += 1
+    await session.commit()
+    return {"changed": changed, **await upgrade_summary(session)}

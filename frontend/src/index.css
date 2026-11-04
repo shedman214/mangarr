@@ -2721,3 +2721,8 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 4px;
 }
+
+/* Settings → Sources → Upgrades */
+.upgrade-settings {
+  margin-top: 18px;
+}
