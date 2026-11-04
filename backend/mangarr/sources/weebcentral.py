@@ -9,7 +9,7 @@ import re
 import httpx
 from bs4 import BeautifulSoup
 
-from .. import USER_AGENT
+from .. import __version__
 from ..util import RateLimiter, parse_chapter_number
 from .base import DirectSource, SourceChapter, SourceSeries
 
@@ -31,7 +31,9 @@ class WeebCentralSource(DirectSource):
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client or httpx.AsyncClient(
-            headers={"User-Agent": USER_AGENT, "Referer": f"{BASE_URL}/"},
+            # WeebCentral rejects the URL comment in the shared User-Agent.
+            # Keep identifying the app, without that optional comment.
+            headers={"User-Agent": f"Mangarr/{__version__}", "Referer": f"{BASE_URL}/"},
             timeout=60,
             trust_env=False,
             follow_redirects=True,

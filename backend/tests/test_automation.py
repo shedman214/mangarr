@@ -3,6 +3,8 @@ group preferences, upgrades, volume merging, and finished-series handling —
 against a real (in-memory) database where the monitor loop is involved."""
 
 import zipfile
+import httpx
+import respx
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -32,6 +34,7 @@ from mangarr.models import (
 from mangarr.schemas import SeriesUpdateIn
 from mangarr.sources import registry
 from mangarr.sources.base import DirectSource, SourceChapter
+from mangarr.sources.weebcentral import BASE_URL, WeebCentralSource
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16
 
@@ -272,6 +275,33 @@ async def test_grab_follows_series_order_and_skips_blocked_source(db_session, mo
     )
     await tasks.grab_missing_chapters(db_session, series, _values("alpha", "beta", "gamma"))
     assert [source for _, source, _, _ in await _queued(db_session)] == ["beta", "beta", "beta"]
+
+
+@respx.mock
+async def test_weebcentral_autolink_sync_and_grab_before_mangafire(db_session, monkeypatch):
+    source = WeebCentralSource()
+    monkeypatch.setattr(registry, "DIRECT_SOURCES", {
+        "weebcentral": source,
+        "mangafire": ListingSource("mangafire", {1: [""], 2: [""]}),
+    })
+    series = await _series(db_session, links=["mangafire"])
+    respx.get(f"{BASE_URL}/search/data").respond(text='''
+        <a href="/series/ABC/Test-Series"><img alt="Test Series cover"></a>
+    ''')
+    respx.get(f"{BASE_URL}/series/ABC/full-chapter-list").respond(text='''
+        <a href="/chapters/CH1"><span>Chapter 1</span></a>
+    ''')
+    values = _values("weebcentral", "mangafire")
+    try:
+        await tasks.link_sources(db_session, series, values)
+        assert {link.source_name for link in series.source_links} == {"weebcentral", "mangafire"}
+        await tasks.update_chapters(db_session, series, values)
+        series = await _load(db_session, series.id)
+        await tasks.grab_missing_chapters(db_session, series, values)
+        queued = await _queued(db_session)
+        assert [name for _, name, _, _ in queued] == ["weebcentral", "mangafire"]
+    finally:
+        await source._client.aclose()
 
 
 # ---------------------------------------------------- scanlation groups

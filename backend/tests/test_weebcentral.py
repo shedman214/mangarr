@@ -3,6 +3,7 @@ import pytest
 import respx
 
 from mangarr.sources.weebcentral import BASE_URL, WeebCentralSource
+from mangarr import __version__
 
 # Real WeebCentral chapter-list structure: each link wraps a leaf <span> with
 # the label, a "Last Read" span, and a <time> whose date digits must be ignored.
@@ -24,6 +25,33 @@ CHAPTER_LIST = """
   </a>
 </body></html>
 """
+
+
+@respx.mock
+async def test_search_and_chapters_identify_app_without_rejected_url_comment():
+    source = WeebCentralSource()
+
+    def response(request):
+        if request.headers.get("User-Agent") != f"Mangarr/{__version__}":
+            return httpx.Response(403)
+        assert request.headers["Referer"] == f"{BASE_URL}/"
+        if request.url.path == "/search/data":
+            return httpx.Response(200, text='''
+                <a href="/series/ABC/Example"><img alt="Example cover"></a>
+                <a href="/series/ABC/Example">Example</a>
+            ''')
+        return httpx.Response(200, text='<a href="/chapters/CH1"><span>Chapter 1</span></a>')
+
+    respx.get(f"{BASE_URL}/search/data").mock(side_effect=response)
+    respx.get(f"{BASE_URL}/series/ABC/full-chapter-list").mock(side_effect=response)
+    try:
+        results = await source.search_series("Example")
+        assert [(r.title, r.external_id) for r in results] == [("Example", "ABC")]
+        assert [c.number for c in await source.list_chapters("ABC")] == [1.0]
+        # Proxy discovery copies these same headers; routing stays opt-in.
+        assert source.discovery_proxy_enabled is False
+    finally:
+        await source._client.aclose()
 
 
 @respx.mock
