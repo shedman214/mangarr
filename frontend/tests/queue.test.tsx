@@ -33,6 +33,43 @@ describe("Queue", () => {
   });
 });
 
+describe("Bulk retries", () => {
+  it("retries only selected failed downloads, leaving active and unselected items alone", async () => {
+    const calls = fakeApi((method, path) => {
+      if (method === "GET") return { body: [item(1, "downloading"), item(2, "failed"), item(3, "failed")] };
+      if (method === "POST") return { body: item(2, "queued") };
+    });
+    renderWithClient(<Activity />);
+    const selected = await screen.findByRole("button", { name: "Retry selected (0)" });
+    expect(selected).toBeDisabled();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select Chapter 1" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select Chapter 2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Retry selected (1)" }));
+    expect(await screen.findByText("1 download queued for retry.")).toBeInTheDocument();
+    expect(calls.filter(c => c.method === "POST").map(c => c.path)).toEqual(["/queue/2/retry"]);
+  });
+
+  it("retries all failed items without a selection and continues after a refused retry", async () => {
+    const calls = fakeApi((method, path) => {
+      if (method === "GET") return { body: [item(1, "downloading"), item(2, "failed"), item(3, "failed")] };
+      if (path === "/queue/2/retry") return { status: 409, body: { detail: "Excluded chapters cannot be retried" } };
+      if (path === "/queue/3/retry") return { body: item(3, "queued") };
+    });
+    renderWithClient(<Activity />);
+    await userEvent.click(await screen.findByRole("button", { name: "Retry all failed (2)" }));
+    expect(await screen.findByText("1 download queued for retry. 1 could not be retried.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not retry Chapter 2: Excluded chapters cannot be retried");
+    expect(calls.filter(c => c.method === "POST").map(c => c.path)).toEqual(["/queue/2/retry", "/queue/3/retry"]);
+  });
+
+  it("disables bulk retries when nothing has failed", async () => {
+    fakeApi(() => ({ body: [item(1, "downloading")] }));
+    renderWithClient(<Activity />);
+    expect(await screen.findByRole("button", { name: "Retry all failed (0)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Retry selected (0)" })).toBeDisabled();
+  });
+});
+
 describe("Queue removal asks first", () => {
   it("does nothing when the confirmation is cancelled", async () => {
     const calls = fakeApi((_method, path) => path === "/queue" ? { body: [item(5, "downloading", "torrent")] } : undefined);

@@ -15,6 +15,7 @@ function confirmRemove(items: QueueItem[]): boolean {
 function Queue() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  const [retryNotice, setRetryNotice] = useState("");
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["queue"],
     queryFn: () => api.get<QueueItem[]>("/queue"),
@@ -28,7 +29,33 @@ function Queue() {
 
   const retry = useMutation({
     mutationFn: (id: number) => api.post(`/queue/${id}/retry`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["queue"] }),
+    onMutate: () => { setRetryNotice(""); retryMany.reset(); },
+    onSuccess: () => {
+      setRetryNotice("Download queued for retry.");
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
+    },
+  });
+
+  const retryMany = useMutation({
+    mutationFn: async (items: QueueItem[]) => {
+      const retried: number[] = [];
+      const failed: { title: string; error: string }[] = [];
+      for (const item of items) {
+        try {
+          await api.post(`/queue/${item.id}/retry`);
+          retried.push(item.id);
+        } catch (error) {
+          failed.push({ title: item.title || item.series_title, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+      return { retried, failed };
+    },
+    onMutate: () => { setRetryNotice(""); retry.reset(); },
+    onSuccess: ({ retried, failed }) => {
+      setSelected(previous => new Set([...previous].filter(id => !retried.includes(id))));
+      setRetryNotice(`${retried.length} download${retried.length === 1 ? "" : "s"} queued for retry.${failed.length ? ` ${failed.length} could not be retried.` : ""}`);
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
+    },
   });
 
   const removeSelected = useMutation({
@@ -46,6 +73,9 @@ function Queue() {
 
   // only ids still in the queue count (items can finish between refetches)
   const selectedVisible = data.filter((item) => selected.has(item.id)).map((item) => item.id);
+  const failedItems = data.filter(item => item.status === "failed");
+  const selectedFailed = failedItems.filter(item => selected.has(item.id));
+  const retryBusy = retry.isPending || retryMany.isPending;
   const allSelected = selectedVisible.length === data.length;
 
   const toggle = (id: number) => {
@@ -60,8 +90,10 @@ function Queue() {
   return (
     <>
       <ErrorNotice error={error} retry={() => void refetch()} />
-      <ErrorNotice error={remove.error || retry.error || removeSelected.error} />
-      <div className="table-actions" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+      <ErrorNotice error={remove.error || retry.error || retryMany.error || removeSelected.error} />
+      {retryNotice && <p role="status">{retryNotice}</p>}
+      {retryMany.data?.failed.map((item, index) => <p role="alert" key={index}>Could not retry {item.title}: {item.error}</p>)}
+      <div className="table-actions" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginBottom: 10 }}>
         <button
           className="btn"
           onClick={() => setSelected(allSelected ? new Set() : new Set(data.map((i) => i.id)))}
@@ -69,9 +101,17 @@ function Queue() {
           {allSelected ? "Clear selected" : "Select all"}
         </button>
         <span>{selectedVisible.length} selected</span>
+        <button className="btn primary" disabled={!selectedFailed.length || retryBusy}
+          onClick={() => retryMany.mutate(selectedFailed)}>
+          {retryMany.isPending ? "Retrying…" : `Retry selected (${selectedFailed.length})`}
+        </button>
+        <button className="btn" disabled={!failedItems.length || retryBusy}
+          onClick={() => retryMany.mutate(failedItems)}>
+          Retry all failed ({failedItems.length})
+        </button>
         <button
           className="btn danger"
-          disabled={selectedVisible.length === 0 || removeSelected.isPending}
+          disabled={selectedVisible.length === 0 || removeSelected.isPending || retryBusy}
           onClick={() => {
             if (confirmRemove(data.filter((item) => selected.has(item.id)))) removeSelected.mutate(selectedVisible);
           }}
@@ -85,6 +125,7 @@ function Queue() {
             <th style={{ width: 34 }}>
               <input
                 type="checkbox"
+                aria-label="Select all downloads"
                 checked={allSelected}
                 onChange={() => setSelected(allSelected ? new Set() : new Set(data.map((i) => i.id)))}
               />
@@ -94,7 +135,7 @@ function Queue() {
             <th style={{ width: 90 }}>Type</th>
             <th style={{ width: 110 }}>Status</th>
             <th style={{ width: 180 }}>Progress</th>
-            <th style={{ width: 96 }}></th>
+            <th style={{ width: 132 }}></th>
           </tr>
         </thead>
         <tbody>
@@ -103,6 +144,7 @@ function Queue() {
               <td className="cell-select">
                 <input
                   type="checkbox"
+                  aria-label={`Select ${item.title || item.series_title}`}
                   checked={selected.has(item.id)}
                   onChange={() => toggle(item.id)}
                 />
@@ -134,20 +176,20 @@ function Queue() {
                 <div className="queue-actions">
                   {item.status === "failed" && (
                     <button
-                      className="btn icon-btn"
+                      className="btn"
                       title="Retry download"
                       aria-label={`Retry ${item.title || item.series_title}`}
-                      disabled={retry.isPending}
+                      disabled={retryBusy}
                       onClick={() => retry.mutate(item.id)}
                     >
-                      ↻
+                      {retry.isPending && retry.variables === item.id ? "Retrying…" : "Retry"}
                     </button>
                   )}
                   <button
                     className="btn icon-btn"
                     title="Remove"
                     aria-label={`Remove ${item.title || item.series_title}`}
-                    disabled={remove.isPending}
+                    disabled={remove.isPending || retryBusy}
                     onClick={() => confirmRemove([item]) && remove.mutate(item.id)}
                   >
                     ✕
