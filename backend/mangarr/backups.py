@@ -75,9 +75,6 @@ def create(data_dir, reason="manual"):
     return {"id": token, "created": manifest["created"], "bytes": target.stat().st_size, "reason": reason}
 
 
-KEEP_PREMIGRATION = 5
-
-
 def pending_schema_changes(db_path):
     """Tables/columns this version needs that the database file lacks (empty = nothing to migrate)."""
     from .models import Base
@@ -108,7 +105,8 @@ def pre_migration_backup(data_dir):
         return None
     result = create(root, reason="pre-migration")
     result["changes"] = changes
-    _prune_premigration(root)
+    # Age-based retention is applied by backup_schedule after startup. Never
+    # discard an in-retention snapshot here merely because there are five.
     return result
 
 
@@ -130,12 +128,6 @@ def list_backups(data_dir):
         out.append({"id": path.stem, "created": manifest.get("created"), "version": manifest.get("version"),
                     "reason": manifest.get("reason", "manual"), "bytes": path.stat().st_size})
     return sorted(out, key=lambda b: b["created"] or 0, reverse=True)
-
-
-def _prune_premigration(root):
-    automatic = [b for b in list_backups(root) if b["reason"] == "pre-migration"]
-    for old in automatic[KEEP_PREMIGRATION:]:
-        archive_path(root, old["id"]).unlink(missing_ok=True)
 
 
 def validate(archive, destination):

@@ -140,7 +140,7 @@ def test_manual_backup_still_requires_current_layout(tmp_path):
         backups.create(tmp_path)
 
 
-def test_premigration_backups_are_pruned_but_manual_ones_kept(tmp_path, monkeypatch):
+def test_premigration_backups_wait_for_age_policy_instead_of_a_five_backup_cap(tmp_path, monkeypatch):
     library(tmp_path / "current").close()
     manual = backups.create(tmp_path / "current")["id"]
     old_layout(tmp_path)[0].close()
@@ -148,10 +148,10 @@ def test_premigration_backups_are_pruned_but_manual_ones_kept(tmp_path, monkeypa
     os.replace(backups.archive_path(tmp_path / "current", manual), backups.archive_path(tmp_path, manual))
     clock = iter(range(1_800_000_000, 1_800_001_000))
     monkeypatch.setattr(backups.time, "time", lambda: next(clock))
-    made = [backups.pre_migration_backup(tmp_path)["id"] for _ in range(backups.KEEP_PREMIGRATION + 2)]
+    made = [backups.pre_migration_backup(tmp_path)["id"] for _ in range(7)]
     ids = {b["id"] for b in backups.list_backups(tmp_path)}
     assert manual in ids
-    assert ids - {manual} == set(made[-backups.KEEP_PREMIGRATION:])
+    assert ids - {manual} == set(made)
 
 
 def test_premigration_backup_failure_is_raised(tmp_path, monkeypatch):

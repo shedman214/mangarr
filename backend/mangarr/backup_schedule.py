@@ -27,7 +27,16 @@ async def load(session: AsyncSession) -> dict:
         if row is None or row.value == "":
             continue
         try:
-            values[name] = row.value == "true" if name == "enabled" else int(row.value)
+            if name == "enabled":
+                if row.value not in {"true", "false"}:
+                    raise ValueError("Invalid boolean")
+                values[name] = row.value == "true"
+            else:
+                number = int(row.value)
+                low, high = LIMITS[name]
+                if not low <= number <= high:
+                    raise ValueError("Out of range")
+                values[name] = number
         except ValueError:
             log.warning("ignoring invalid backup setting %s=%r", name, row.value)
     return values
