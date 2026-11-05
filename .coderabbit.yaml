@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit AI review settings for this Mangarr fork (https://docs.coderabbit.ai/reference/configuration)
+language: en-US
+early_access: false
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+  path_filters:
+    - "!frontend/package-lock.json"
+    - "!backend/static/**"
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.webp"
+  path_instructions:
+    - path: "backend/mangarr/sources/**"
+      instructions: |
+        Source adapters must keep the honest Mangarr User-Agent and the per-source rate limits, and must never disguise
+        themselves or try to get past Cloudflare, logins, age checks or paid access. Packed or obfuscated site scripts may be
+        decoded as text but never executed. Enabled proxies must fail closed (no silent direct fallback). Chapter Referers
+        travel in the private URL fragment and must be stripped before requests. Adult-content handling must only apply when
+        the `adult_content` setting is on.
+    - path: "backend/mangarr/{logs,auth,backups,settings_service}.py"
+      instructions: |
+        Secrets (API keys, passwords, session cookies, proxy credentials) must never be logged, returned unmasked by the API,
+        or written to downloads; check redaction covers new secret-bearing values. Login sessions must stay revocable and the
+        recovery switch must keep working. Backups and restores must validate input and never overwrite the live database outside startup.
+    - path: "backend/mangarr/{permissions,permission_jobs}.py"
+      instructions: |
+        Permission changes must stay scoped to Mangarr-managed files, reject symlinks and traversal, protect hardlinked files,
+        record undo information before each change, and never recursively chmod/chown whole shares.
+    - path: "backend/tests/**"
+      instructions: "Tests must be offline and deterministic (mock HTTP), with no real credentials, private hostnames or LAN addresses."
+    - path: "frontend/src/**"
+      instructions: |
+        Check destructive actions (deleting, removing queue items, restores, applying settings to all series) ask for
+        confirmation, settings rows stay aligned with the existing form layout, and the UI works at phone width.
+        Behavior changes should come with Vitest tests in frontend/tests.
+    - path: "templates/**"
+      instructions: "Unraid templates must not contain real credentials, private paths or LAN addresses; defaults must be safe for new users."
+chat:
+  auto_reply: true
