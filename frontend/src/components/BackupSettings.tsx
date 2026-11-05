@@ -27,7 +27,7 @@ function wouldRemove(saved: StoredBackup[], retention: number, manualRetention: 
   }).length;
 }
 
-function AutomaticBackups({ saved }: { saved: StoredBackup[] }) {
+function AutomaticBackups({ saved }: { saved: StoredBackup[] | undefined }) {
   const client = useQueryClient();
   const schedule = useQuery({ queryKey: ["backup-schedule"], queryFn: () => api.get<Schedule>("/settings/backups/schedule") });
   const [draft, setDraft] = useState<{ enabled: boolean; interval: string; retention: string; manual: string } | null>(null);
@@ -45,6 +45,7 @@ function AutomaticBackups({ saved }: { saved: StoredBackup[] }) {
   const set = (patch: Partial<typeof form>) => setDraft({ ...form, ...patch });
   const submit = () => {
     const body = { enabled: form.enabled, interval_days: Number(form.interval), retention_days: Number(form.retention), manual_retention_days: Number(form.manual) };
+    if (!saved) return; // the warning below needs the full list of saved backups
     const count = wouldRemove(saved, body.retention_days, body.manual_retention_days);
     if (count && !confirm(`These settings remove ${count} saved backup${count === 1 ? "" : "s"} now. Continue?`)) return;
     save.mutate(body);
@@ -71,7 +72,7 @@ function AutomaticBackups({ saved }: { saved: StoredBackup[] }) {
     <p className="section-hint">Interval: how often a backup is made (Sonarr default 7). Keep: automatic and before-update backups older than this are deleted (Sonarr default 28). Manual: 0 keeps manual backups until you delete them.</p>
     <div className="form-row">
       <label />
-      <button className="btn primary" disabled={!draft || save.isPending} onClick={submit}>{save.isPending ? "Saving…" : "Save automatic backups"}</button>
+      <button className="btn primary" disabled={!draft || !saved || save.isPending} onClick={submit}>{save.isPending ? "Saving…" : "Save automatic backups"}</button>
     </div>
     {d && <dl className="backup-status">
       <dt>Folder</dt><dd>{d.folder}</dd>
@@ -116,7 +117,9 @@ export function BackupSettings() {
     <button className="btn" disabled={backup.isPending} onClick={() => backup.mutate()}>{backup.isPending ? "Creating backup…" : "Download backup"}</button>
     <ErrorNotice error={backup.error} />
     {backup.isSuccess && <p role="status">Backup created and download requested. A copy is retained in /config/backups.</p>}
-    <AutomaticBackups saved={stored.data ?? []} />
+    {/* undefined until the list is loaded and current (not mid-refetch): saving waits, so the
+        "removes N backups" warning is never skipped or counted from a stale list */}
+    <AutomaticBackups saved={stored.isSuccess && !stored.isFetching ? stored.data : undefined} />
     <h4>Saved backups</h4>
     <p className="section-hint">Kept in /config/backups. Mangarr also saves one automatically before an update changes the database layout.</p>
     {stored.data && (stored.data.length ? <ul aria-label="Saved backups">
