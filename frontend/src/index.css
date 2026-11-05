@@ -279,6 +279,33 @@ input[type="checkbox"] {
   gap: 6px;
 }
 
+.queue-filter, .queue-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.queue-filter input { width: min(100%, 380px); }
+.queue-pagination span { margin-right: auto; }
+.queue-bulk-actions {
+  position: sticky;
+  top: -24px;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 -24px 10px;
+  padding: 12px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 8px rgb(0 0 0 / 12%);
+}
+.queue-drag { cursor: grab; min-width: 44px; touch-action: none; user-select: none; }
+.queue-drag:active { cursor: grabbing; }
+.queue-drop-target { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 /* ---------- poster grid ---------- */
 
 .poster-grid {
@@ -1866,6 +1893,16 @@ h4.link-text:hover {
   .queue-table tr {
     grid-template-columns: 44px minmax(0, 1fr) auto auto;
   }
+
+  .queue-bulk-actions {
+    top: -14px;
+    margin-inline: -14px;
+    padding: 8px 14px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .queue-bulk-actions .btn { justify-content: center; min-width: 0; }
 
   .queue-table .cell-select {
     grid-area: 1 / 1 / 5 / 2;

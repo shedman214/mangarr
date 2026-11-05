@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { HistoryItem, QueueItem } from "../api/types";
@@ -12,10 +12,55 @@ function confirmRemove(items: QueueItem[]): boolean {
   return confirm(`Remove ${what} from the queue?${torrents}`);
 }
 
+function QueueMoveHandle({ item, busy, onMove, onTarget }: {
+  item: QueueItem; busy: boolean; onMove: (id: number, before?: number) => void;
+  onTarget: (id: number | null) => void;
+}) {
+  const drag = useRef<{ x: number; y: number; moved: boolean; target: number | null } | null>(null);
+  const ignoreClick = useRef(false);
+  return <button type="button" className="btn queue-drag" disabled={busy}
+    aria-label={`Move ${item.title || item.series_title} to top`}
+    title="Drag to reorder, or click to download next"
+    onClick={event => {
+      if (ignoreClick.current && event.detail > 0) { ignoreClick.current = false; return; }
+      onMove(item.id);
+    }}
+    onPointerDown={event => {
+      if (event.button !== 0 || busy) return;
+      ignoreClick.current = false;
+      drag.current = { x: event.clientX, y: event.clientY, moved: false, target: null };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }}
+    onPointerMove={event => {
+      const current = drag.current;
+      if (!current || busy) return;
+      if (!current.moved && Math.hypot(event.clientX - current.x, event.clientY - current.y) < 6) return;
+      current.moved = true;
+      const row = document.elementFromPoint(event.clientX, event.clientY)?.closest("tr[data-queue-id]");
+      const target = row ? Number(row.getAttribute("data-queue-id")) : null;
+      current.target = target !== item.id ? target : null;
+      onTarget(current.target);
+    }}
+    onPointerUp={event => {
+      const current = drag.current;
+      drag.current = null;
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      onTarget(null);
+      if (current?.moved) {
+        ignoreClick.current = true;
+        if (current.target !== null && !busy) onMove(item.id, current.target);
+      }
+    }}
+    onPointerCancel={() => { drag.current = null; ignoreClick.current = true; onTarget(null); }}>↕</button>;
+}
+
 function Queue() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [retryNotice, setRetryNotice] = useState("");
+  const [filter, setFilter] = useState("");
+  const [page, setPage] = useState(0);
+  const [dropTarget, setDropTarget] = useState<number | null>(null);
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["queue"],
     queryFn: () => api.get<QueueItem[]>("/queue"),
@@ -76,6 +121,17 @@ function Queue() {
     },
   });
 
+  const moveQueue = useMutation({
+    mutationFn: (body: { ids: number[]; before_id?: number; to_end?: boolean }) =>
+      api.post<{ moved: number; skipped: number }>("/queue/move", body),
+    onMutate: () => setRetryNotice(""),
+    onSuccess: ({ moved, skipped }, body) => {
+      setSelected(previous => new Set([...previous].filter(id => !body.ids.includes(id))));
+      setRetryNotice(`${moved} queued chapter${moved === 1 ? "" : "s"} moved ${body.to_end ? "to the bottom" : body.before_id ? "to the new position" : "to the front"}. The current download will finish first.${skipped ? ` ${skipped} no longer queued or unsupported item${skipped === 1 ? " was" : "s were"} left alone.` : ""}`);
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
+    },
+  });
+
   if (isLoading) return <Spinner />;
   if (error && !data) return <ErrorNotice error={error} retry={() => void refetch()} />;
   if (!data || data.length === 0)
@@ -85,8 +141,17 @@ function Queue() {
   const selectedVisible = data.filter((item) => selected.has(item.id)).map((item) => item.id);
   const failedItems = data.filter(item => item.status === "failed");
   const selectedFailed = failedItems.filter(item => selected.has(item.id));
-  const retryBusy = retry.isPending || retryMany.isPending || removeFailed.isPending || removeSelected.isPending || remove.isPending;
-  const allSelected = selectedVisible.length === data.length;
+  const selectedQueued = data.filter(item => selected.has(item.id) && item.kind === "direct" && item.status === "queued");
+  const retryBusy = retry.isPending || retryMany.isPending || removeFailed.isPending || removeSelected.isPending || remove.isPending || moveQueue.isPending;
+  const matches = data.filter(item => `${item.title} ${item.series_title} ${item.source_name}`.toLowerCase().includes(filter.trim().toLowerCase()));
+  const allSelected = matches.length > 0 && matches.every(item => selected.has(item.id));
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(matches.length / 100) - 1));
+  const pageItems = matches.slice(currentPage * 100, (currentPage + 1) * 100);
+  const selectMatches = () => setSelected(previous => {
+    const next = new Set(previous);
+    for (const item of matches) { if (allSelected) next.delete(item.id); else next.add(item.id); }
+    return next;
+  });
 
   const toggle = (id: number) => {
     setSelected((prev) => {
@@ -100,17 +165,30 @@ function Queue() {
   return (
     <>
       <ErrorNotice error={error} retry={() => void refetch()} />
-      <ErrorNotice error={remove.error || retry.error || retryMany.error || removeSelected.error || removeFailed.error} />
+      <ErrorNotice error={remove.error || retry.error || retryMany.error || removeSelected.error || removeFailed.error || moveQueue.error} />
       {retryNotice && <p role="status">{retryNotice}</p>}
       {retryMany.data?.failed.map((item, index) => <p role="alert" key={index}>Could not retry {item.title}: {item.error}</p>)}
-      <div className="table-actions" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginBottom: 10 }}>
+      <div className="queue-filter">
+        <label htmlFor="queue-filter">Find downloads</label>
+        <input id="queue-filter" type="search" placeholder="Manga title or source…" value={filter}
+          onChange={event => { setFilter(event.target.value); setPage(0); }} />
+      </div>
+      <p className="section-hint">Select queued chapters and click Download now to move them to the front. The current download finishes first. Drag the ↕ handle to change a chapter’s position, or click it to move that chapter to the top. Torrent downloads are managed in qBittorrent.</p>
+      <div className="table-actions queue-bulk-actions" role="region" aria-label="Download actions">
         <button
           className="btn"
-          onClick={() => setSelected(allSelected ? new Set() : new Set(data.map((i) => i.id)))}
+          disabled={!matches.length || retryBusy}
+          onClick={selectMatches}
         >
-          {allSelected ? "Clear selected" : "Select all"}
+          {allSelected ? "Clear selected" : filter.trim() ? "Select all matches" : "Select all"}
         </button>
         <span>{selectedVisible.length} selected</span>
+        <button className="btn primary" disabled={!selectedQueued.length || retryBusy}
+          onClick={() => moveQueue.mutate({ ids: selectedQueued.map(item => item.id) })}>
+          {moveQueue.isPending ? "Moving…" : `Download now (${selectedQueued.length})`}
+        </button>
+        <button className="btn" disabled={!selectedQueued.length || retryBusy}
+          onClick={() => moveQueue.mutate({ ids: selectedQueued.map(item => item.id), to_end: true })}>Move to bottom</button>
         <button className="btn primary" disabled={!selectedFailed.length || retryBusy}
           onClick={() => retryMany.mutate(selectedFailed)}>
           {retryMany.isPending ? "Retrying…" : `Retry selected (${selectedFailed.length})`}
@@ -137,6 +215,16 @@ function Queue() {
           {removeSelected.isPending ? "Removing…" : "Remove selected"}
         </button>
       </div>
+      {matches.length > 100 && <p className="section-hint">Select all includes every matching download across all pages.</p>}
+      <div className="queue-pagination" aria-label="Queue pages">
+        <span>{matches.length ? `Showing ${currentPage * 100 + 1}–${Math.min((currentPage + 1) * 100, matches.length)} of ${matches.length}` : "No matching downloads"}</span>
+        {matches.length > 100 && <>
+        <button className="btn" disabled={currentPage === 0} onClick={() => setPage(0)}>First</button>
+        <button className="btn" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button>
+        <button className="btn" disabled={(currentPage + 1) * 100 >= matches.length} onClick={() => setPage(currentPage + 1)}>Next</button>
+        <button className="btn" disabled={(currentPage + 1) * 100 >= matches.length} onClick={() => setPage(Math.ceil(matches.length / 100) - 1)}>Last</button>
+        </>}
+      </div>
       <table className="data-table card-table queue-table">
         <thead>
           <tr>
@@ -145,7 +233,7 @@ function Queue() {
                 type="checkbox"
                 aria-label="Select all downloads"
                 checked={allSelected}
-                onChange={() => setSelected(allSelected ? new Set() : new Set(data.map((i) => i.id)))}
+                onChange={selectMatches}
               />
             </th>
             <th>Title</th>
@@ -157,8 +245,9 @@ function Queue() {
           </tr>
         </thead>
         <tbody>
-          {data.map((item) => (
-            <tr key={item.id}>
+          {pageItems.map((item) => (
+            <tr key={item.id} className={dropTarget === item.id ? "queue-drop-target" : undefined}
+              data-queue-id={item.kind === "direct" && item.status === "queued" ? item.id : undefined}>
               <td className="cell-select">
                 <SelectionCheckbox
                   label={`Select ${item.title || item.series_title}`}
@@ -191,6 +280,9 @@ function Queue() {
               </td>
               <td className="cell-remove">
                 <div className="queue-actions">
+                  {item.kind === "direct" && item.status === "queued" && <QueueMoveHandle
+                    item={item} busy={retryBusy} onTarget={setDropTarget}
+                    onMove={(id, before) => moveQueue.mutate({ ids: [id], ...(before === undefined ? {} : { before_id: before }) })} />}
                   {item.status === "failed" && (
                     <button
                       className="btn"

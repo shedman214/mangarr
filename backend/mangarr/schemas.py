@@ -296,6 +296,18 @@ class QueueRemoveOut(BaseModel):
     removed: int
 
 
+class QueueMoveIn(BaseModel):
+    ids: list[int] = Field(min_length=1)
+    # No target means move to the front. A target means insert before it.
+    before_id: int | None = None
+    to_end: bool = False
+
+
+class QueueMoveOut(BaseModel):
+    moved: int
+    skipped: int
+
+
 class QueueItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

@@ -426,6 +426,24 @@ Please be a good citizen: keep the honest User-Agent, don't lower the rate
 limits, and use a MangaDex account so their team can see the traffic is
 legitimate.
 
+## Choose what downloads next
+
+In **Activity → Queue**, use **Find downloads** to find a manga, select its
+queued chapters, then click **Download now**. They move to the front in their
+current chapter order. The chapter already downloading finishes first; the
+normal queue worker picks up the promoted chapters next.
+
+Drag a queued chapter's **↕** handle onto another queued chapter to place it
+before that chapter. Clicking the handle (or pressing Enter while it is focused)
+moves that chapter to the top. **Move to bottom** sends selected queued chapters
+to the end. The order is saved across refreshes and container restarts, and new
+automatic grabs join behind it.
+
+Only queued direct downloads can be moved. Active downloads and imports are
+not interrupted; failed jobs still use **Retry**, and torrents keep their
+qBittorrent order. Large queues show 100 rows per page. **Select all matches**
+includes every download matching the search, including other pages.
+
 ## Roadmap
 
 ### Background permission operations

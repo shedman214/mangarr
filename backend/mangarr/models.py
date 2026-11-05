@@ -230,6 +230,8 @@ class Download(Base):
     release_group: Mapped[str] = mapped_column(String, default="")
     torrent_hash: Mapped[str] = mapped_column(String, default="")
     progress: Mapped[float] = mapped_column(Float, default=0.0)  # 0..1
+    # Larger values run first; zero preserves insertion order for new grabs.
+    queue_priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     error: Mapped[str] = mapped_column(Text, default="")
     # a failure a later attempt can be expected to clear (network, timeout,
     # 429/5xx, stall): the monitor retries it after hours instead of days

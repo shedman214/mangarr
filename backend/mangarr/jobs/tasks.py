@@ -1119,7 +1119,7 @@ async def process_direct_queue() -> None:
                 select(Download)
                 .where(Download.kind == DownloadKind.DIRECT,
                        Download.status == DownloadStatus.QUEUED)
-                .order_by(Download.id)
+                .order_by(Download.queue_priority.desc(), Download.id)
                 .limit(1)
             )
             dl = result.scalar_one_or_none()

@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, case, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
@@ -23,7 +23,7 @@ from ..models import (
     HistoryEvent,
     Series,
 )
-from ..schemas import GrabIn, HistoryOut, QueueItemOut, QueueRemoveIn, QueueRemoveOut
+from ..schemas import GrabIn, HistoryOut, QueueItemOut, QueueRemoveIn, QueueRemoveOut, QueueMoveIn, QueueMoveOut
 from ..sources import registry
 
 log = logging.getLogger(__name__)
@@ -57,7 +57,11 @@ async def get_queue(session: AsyncSession = Depends(get_session)):
             # chapter on that source, however long that is
             failed_grab_blocks(now),
         ))
-        .order_by(Download.id)
+        .order_by(
+            case((Download.status.in_([DownloadStatus.DOWNLOADING, DownloadStatus.IMPORTING]), 0),
+                 (Download.status == DownloadStatus.QUEUED, 1), else_=2),
+            Download.queue_priority.desc(), Download.id,
+        )
     )
     items = []
     for dl, series_title in result.all():
@@ -134,6 +138,56 @@ async def remove_many_from_queue(
     if not body.ids:
         raise HTTPException(422, "No download ids given")
     return QueueRemoveOut(removed=await _remove_downloads(session, body.ids))
+
+
+@router.post("/queue/move", response_model=QueueMoveOut)
+async def move_queued_downloads(body: QueueMoveIn, session: AsyncSession = Depends(get_session)):
+    """Move queued direct chapters only. Never retry or preempt active work.
+
+    SQLite's write lock serializes simultaneous edits before reading the order.
+    New automatic grabs keep priority zero and join behind existing priorities.
+    """
+    if body.to_end and body.before_id is not None:
+        raise HTTPException(422, "Choose either a drop target or the end of the queue.")
+    await session.execute(text("BEGIN IMMEDIATE"))
+    try:
+        rows = (await session.execute(
+            select(Download.id, Download.queue_priority)
+            .where(Download.kind == DownloadKind.DIRECT, Download.status == DownloadStatus.QUEUED)
+            .order_by(Download.queue_priority.desc(), Download.id)
+        )).all()
+        requested = set(body.ids)
+        moving = [row.id for row in rows if row.id in requested]
+        if body.before_id is not None and body.before_id not in {row.id for row in rows}:
+            raise HTTPException(409, "That chapter is no longer queued. Refresh the queue and try again.")
+        if body.before_id in moving:
+            raise HTTPException(422, "Choose a different chapter as the drop target.")
+        if not moving:
+            raise HTTPException(409, "None of the selected chapters are still queued. Active, failed and torrent downloads cannot be moved.")
+        if body.before_id is None and not body.to_end:
+            highest = max((row.queue_priority for row in rows), default=0)
+            priorities = {id: highest + len(moving) - index for index, id in enumerate(moving)}
+        else:
+            remaining = [row.id for row in rows if row.id not in requested]
+            index = len(remaining) if body.to_end else remaining.index(body.before_id)
+            ordered = remaining[:index] + moving + remaining[index:]
+            old = dict(rows)
+            priorities = {id: len(ordered) - index for index, id in enumerate(ordered)
+                          if old[id] != len(ordered) - index}
+        # Keep SQL statements bounded even when a user moves a whole series.
+        pairs = list(priorities.items())
+        for start in range(0, len(pairs), 400):
+            chunk = dict(pairs[start:start + 400])
+            await session.execute(update(Download).where(
+                Download.id.in_(chunk), Download.kind == DownloadKind.DIRECT,
+                Download.status == DownloadStatus.QUEUED,
+            ).values(queue_priority=case(chunk, value=Download.id)),
+                execution_options={"synchronize_session": False})
+        await session.commit()
+        return QueueMoveOut(moved=len(moving), skipped=len(requested) - len(moving))
+    except Exception:
+        await session.rollback()
+        raise
 
 
 @router.post("/queue/remove-failed", response_model=QueueRemoveOut)
