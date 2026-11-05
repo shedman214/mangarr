@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
@@ -134,6 +134,29 @@ async def remove_many_from_queue(
     if not body.ids:
         raise HTTPException(422, "No download ids given")
     return QueueRemoveOut(removed=await _remove_downloads(session, body.ids))
+
+
+@router.post("/queue/remove-failed", response_model=QueueRemoveOut)
+async def remove_failed_from_queue(
+    body: QueueRemoveIn, session: AsyncSession = Depends(get_session)
+):
+    """Dismiss the displayed failures, leaving active jobs and all files alone.
+
+    Check status in the update itself: a row retried since the UI loaded must
+    not be cancelled. Failed torrents are not deleted from qBittorrent.
+    """
+    if not body.ids:
+        raise HTTPException(422, "No download ids given")
+    result = await session.execute(
+        update(Download).where(
+            Download.id.in_(body.ids),
+            Download.status == DownloadStatus.FAILED,
+            Download.error != REMOVED_BY_USER,
+        ).values(error=REMOVED_BY_USER).returning(Download.id)
+    )
+    removed = len(result.scalars().all())
+    await session.commit()
+    return QueueRemoveOut(removed=removed)
 
 
 @router.post("/queue/{download_id}/retry", response_model=QueueItemOut)

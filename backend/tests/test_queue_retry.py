@@ -188,3 +188,36 @@ async def test_bulk_removal_only_stops_active_torrents(db_session, monkeypatch):
 
     client.delete_torrents.assert_awaited_once_with(["a" * 40])
     assert await queue.get_queue(db_session) == []
+
+
+async def test_remove_failed_is_status_guarded_and_keeps_torrent_data(db_session, monkeypatch):
+    from mangarr.schemas import QueueRemoveIn
+    failed = Download(kind=DownloadKind.DIRECT, status=DownloadStatus.FAILED, error="page error")
+    torrent = Download(kind=DownloadKind.TORRENT, status=DownloadStatus.FAILED,
+                       torrent_hash="c" * 40, error="import failed")
+    retried = Download(kind=DownloadKind.DIRECT, status=DownloadStatus.QUEUED)
+    active = Download(kind=DownloadKind.TORRENT, status=DownloadStatus.DOWNLOADING)
+    completed = Download(kind=DownloadKind.DIRECT, status=DownloadStatus.DONE)
+    dismissed = Download(kind=DownloadKind.DIRECT, status=DownloadStatus.FAILED, error=queue.REMOVED_BY_USER)
+    db_session.add_all([failed, torrent, retried, active, completed, dismissed])
+    await db_session.commit()
+    def no_client(*args):
+        pytest.fail("Dismissing failures must not contact qBittorrent")
+    monkeypatch.setattr(queue, "QbtClient", no_client)
+    ids = [dl.id for dl in [failed, torrent, retried, active, completed, dismissed]] + [99999]
+    result = await queue.remove_failed_from_queue(QueueRemoveIn(ids=ids), db_session)
+    assert result.removed == 2
+    await db_session.refresh(failed)
+    await db_session.refresh(torrent)
+    assert failed.error == torrent.error == queue.REMOVED_BY_USER
+    assert retried.status == DownloadStatus.QUEUED
+    assert active.status == DownloadStatus.DOWNLOADING
+    assert completed.status == DownloadStatus.DONE
+    assert (await queue.remove_failed_from_queue(QueueRemoveIn(ids=ids), db_session)).removed == 0
+
+
+async def test_remove_failed_rejects_empty_list(db_session):
+    from mangarr.schemas import QueueRemoveIn
+    with pytest.raises(HTTPException) as error:
+        await queue.remove_failed_from_queue(QueueRemoveIn(ids=[]), db_session)
+    assert error.value.status_code == 422

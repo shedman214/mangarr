@@ -71,6 +71,43 @@ describe("Bulk retries", () => {
 });
 
 describe("Queue removal asks first", () => {
+  it("removes only failed jobs after confirmation without needing a selection", async () => {
+    const calls = fakeApi((method, path) => {
+      if (method === "GET") return { body: [item(1, "downloading"), item(2, "failed"), item(3, "failed", "torrent")] };
+      if (path === "/queue/remove-failed") return { body: { removed: 2 } };
+    });
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    renderWithClient(<Activity />);
+    await userEvent.click(await screen.findByRole("button", { name: "Remove failed (2)" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("No files will be deleted"));
+    expect(calls.filter(c => c.method === "POST")).toEqual([{ method: "POST", path: "/queue/remove-failed", body: { ids: [2, 3] } }]);
+    expect(await screen.findByRole("status")).toHaveTextContent("2 failed jobs removed. No files were deleted.");
+  });
+
+  it("cancelling Remove failed leaves jobs alone", async () => {
+    const calls = fakeApi(() => ({ body: [item(2, "failed")] }));
+    vi.stubGlobal("confirm", vi.fn(() => false));
+    renderWithClient(<Activity />);
+    await userEvent.click(await screen.findByRole("button", { name: "Remove failed (1)" }));
+    expect(calls.filter(c => c.method !== "GET")).toEqual([]);
+  });
+
+  it("disables Remove failed when there are no failures", async () => {
+    fakeApi(() => ({ body: [item(1, "downloading")] }));
+    renderWithClient(<Activity />);
+    expect(await screen.findByRole("button", { name: "Remove failed (0)" })).toBeDisabled();
+  });
+
+  it("keeps failures visible and reports a refused removal", async () => {
+    fakeApi((method) => method === "GET" ? { body: [item(2, "failed")] } : { status: 500, body: { detail: "Could not remove failed jobs" } });
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    renderWithClient(<Activity />);
+    await userEvent.click(await screen.findByRole("button", { name: "Remove failed (1)" }));
+    expect(await screen.findByText("Could not remove failed jobs")).toBeInTheDocument();
+    expect(screen.getByText("Chapter 2")).toBeInTheDocument();
+  });
+
   it("does nothing when the confirmation is cancelled", async () => {
     const calls = fakeApi((_method, path) => path === "/queue" ? { body: [item(5, "downloading", "torrent")] } : undefined);
     const confirm = vi.fn(() => false);

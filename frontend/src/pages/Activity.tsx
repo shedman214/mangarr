@@ -66,6 +66,16 @@ function Queue() {
     },
   });
 
+  const removeFailed = useMutation({
+    mutationFn: (ids: number[]) => api.post<{ removed: number }>("/queue/remove-failed", { ids }),
+    onMutate: () => { setRetryNotice(""); retry.reset(); retryMany.reset(); },
+    onSuccess: ({ removed }, ids) => {
+      setSelected(previous => new Set([...previous].filter(id => !ids.includes(id))));
+      setRetryNotice(`${removed} failed job${removed === 1 ? "" : "s"} removed. No files were deleted.${removed < ids.length ? " Jobs that are no longer failed were left alone." : ""}`);
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
+    },
+  });
+
   if (isLoading) return <Spinner />;
   if (error && !data) return <ErrorNotice error={error} retry={() => void refetch()} />;
   if (!data || data.length === 0)
@@ -75,7 +85,7 @@ function Queue() {
   const selectedVisible = data.filter((item) => selected.has(item.id)).map((item) => item.id);
   const failedItems = data.filter(item => item.status === "failed");
   const selectedFailed = failedItems.filter(item => selected.has(item.id));
-  const retryBusy = retry.isPending || retryMany.isPending;
+  const retryBusy = retry.isPending || retryMany.isPending || removeFailed.isPending || removeSelected.isPending || remove.isPending;
   const allSelected = selectedVisible.length === data.length;
 
   const toggle = (id: number) => {
@@ -90,7 +100,7 @@ function Queue() {
   return (
     <>
       <ErrorNotice error={error} retry={() => void refetch()} />
-      <ErrorNotice error={remove.error || retry.error || retryMany.error || removeSelected.error} />
+      <ErrorNotice error={remove.error || retry.error || retryMany.error || removeSelected.error || removeFailed.error} />
       {retryNotice && <p role="status">{retryNotice}</p>}
       {retryMany.data?.failed.map((item, index) => <p role="alert" key={index}>Could not retry {item.title}: {item.error}</p>)}
       <div className="table-actions" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginBottom: 10 }}>
@@ -108,6 +118,14 @@ function Queue() {
         <button className="btn" disabled={!failedItems.length || retryBusy}
           onClick={() => retryMany.mutate(failedItems)}>
           Retry all failed ({failedItems.length})
+        </button>
+        <button className="btn danger" disabled={!failedItems.length || retryBusy}
+          onClick={() => {
+            if (confirm(`Remove ${failedItems.length} failed jobs from the queue? No files will be deleted, and active downloads will stay in the queue. Monitored chapters may be downloaded again automatically.`)) {
+              removeFailed.mutate(failedItems.map(item => item.id));
+            }
+          }}>
+          {removeFailed.isPending ? "Removing failed…" : `Remove failed (${failedItems.length})`}
         </button>
         <button
           className="btn danger"
