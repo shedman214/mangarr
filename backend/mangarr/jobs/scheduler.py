@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -51,6 +52,12 @@ async def start() -> None:
     scheduler.add_job(
         sync_all_lists, "interval", hours=list_hours,
         id="import_lists", max_instances=1, coalesce=True,
+    )
+    from ..backup_schedule import scheduled_job as backup_job
+    # hourly check; a backup is only made when one is due (Settings → Backup and restore)
+    scheduler.add_job(
+        backup_job, "interval", hours=1, id="backups",
+        max_instances=1, coalesce=True, next_run_time=datetime.now() + timedelta(minutes=5),
     )
     scheduler.start()
     log.info("Scheduler started (monitor every %d min)", interval)

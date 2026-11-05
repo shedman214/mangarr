@@ -4,10 +4,13 @@ import tempfile
 import sqlite3
 import zipfile
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import FileResponse
 
-from .. import backups
+from .. import backup_schedule, backups
+from ..db import get_session
 from ..config import config
 
 router = APIRouter(prefix="/settings/backups", tags=["backups"])
@@ -21,6 +24,33 @@ async def create_backup():
 @router.get("")
 async def list_backups():
     return await asyncio.to_thread(backups.list_backups, config.data_dir)
+
+
+class ScheduleIn(BaseModel):
+    enabled: bool
+    interval_days: int
+    retention_days: int
+    manual_retention_days: int = 0
+
+
+@router.get("/schedule")
+async def get_schedule(session: AsyncSession = Depends(get_session)):
+    values = await backup_schedule.load(session)
+    saved = await asyncio.to_thread(backups.list_backups, config.data_dir)
+    return backup_schedule.status(values, saved)
+
+
+@router.put("/schedule")
+async def put_schedule(body: ScheduleIn, session: AsyncSession = Depends(get_session)):
+    """Save the schedule and apply the retention right away (the UI confirms first
+    when that would remove existing backups)."""
+    try:
+        values = await backup_schedule.save(session, body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    removed = await asyncio.to_thread(backups.prune, config.data_dir, values["retention_days"], values["manual_retention_days"])
+    saved = await asyncio.to_thread(backups.list_backups, config.data_dir)
+    return {**backup_schedule.status(values, saved), "removed": len(removed)}
 
 
 @router.get("/restore")
@@ -65,3 +95,12 @@ async def download_backup(token: str):
     if not path.is_file():
         raise HTTPException(404, "Backup not found")
     return FileResponse(path, media_type="application/zip", filename=f"mangarr-backup-{token}.zip", headers={"Cache-Control": "no-store"})
+
+
+# after /restore and /schedule, so those fixed paths are matched first
+@router.delete("/{token}", status_code=204)
+async def delete_backup(token: str):
+    try:
+        await asyncio.to_thread(backups.delete_backup, config.data_dir, token)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(404, "Backup not found") from exc
