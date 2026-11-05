@@ -13,8 +13,6 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
-    base_branches:
-      - main
   path_filters:
     - "!frontend/package-lock.json"
     - "!backend/static/**"
