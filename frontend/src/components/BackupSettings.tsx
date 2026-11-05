@@ -117,8 +117,9 @@ export function BackupSettings() {
     <button className="btn" disabled={backup.isPending} onClick={() => backup.mutate()}>{backup.isPending ? "Creating backup…" : "Download backup"}</button>
     <ErrorNotice error={backup.error} />
     {backup.isSuccess && <p role="status">Backup created and download requested. A copy is retained in /config/backups.</p>}
-    {/* undefined until the list has loaded: saving waits, so the "removes N backups" warning is never skipped */}
-    <AutomaticBackups saved={stored.isSuccess ? stored.data : undefined} />
+    {/* undefined until the list is loaded and current (not mid-refetch): saving waits, so the
+        "removes N backups" warning is never skipped or counted from a stale list */}
+    <AutomaticBackups saved={stored.isSuccess && !stored.isFetching ? stored.data : undefined} />
     <h4>Saved backups</h4>
     <p className="section-hint">Kept in /config/backups. Mangarr also saves one automatically before an update changes the database layout.</p>
     {stored.data && (stored.data.length ? <ul aria-label="Saved backups">

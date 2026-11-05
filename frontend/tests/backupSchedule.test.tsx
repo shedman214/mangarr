@@ -104,3 +104,39 @@ describe("Backup and restore → saving waits for the backup list", () => {
     expect(calls.some((c) => c.method === "PUT")).toBe(false);
   });
 });
+
+describe("Backup and restore → saving waits for a refreshed backup list", () => {
+  it("disables Save while the list is being refetched after a new backup", async () => {
+    let listCalls = 0;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const calls = fakeApi((method, path) => {
+      if (method === "GET" && path === "/settings/backups/restore") return { body: { pending: false } };
+      if (method === "GET" && path === "/settings/backups/schedule") return { body: schedule };
+      if (method === "GET" && path === "/settings/backups") return { body: saved };
+      if (method === "POST" && path === "/settings/backups") return { body: { id: "e".repeat(32) } };
+    });
+    const real = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/v1/settings/backups" && (!init || !init.method || init.method === "GET") && ++listCalls === 2) await held;
+      if (url === `/api/v1/settings/backups/${"e".repeat(32)}`) return new Response("zip");
+      return real(url, init);
+    }));
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    vi.stubGlobal("confirm", vi.fn(() => false));
+    renderWithClient(<BackupSettings />);
+    const field = await screen.findByLabelText("Delete manual backups after (days)");
+    await userEvent.clear(field);
+    await userEvent.type(field, "30");
+    const save = screen.getByRole("button", { name: "Save automatic backups" });
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: "Download backup" }));
+    await waitFor(() => expect(listCalls).toBe(2));
+    expect(save).toBeDisabled();  // the list is refetching: no save on stale data
+    release();
+    await waitFor(() => expect(save).toBeEnabled());
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+});
