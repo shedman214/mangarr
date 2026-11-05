@@ -3,7 +3,7 @@
   "short_name": "Mangarr",
   "description": "Manga collection manager",
   "start_url": "/",
-  "display": "standalone",
+  "display": "minimal-ui",
   "background_color": "#1a1d24",
   "theme_color": "#20242c",
   "icons": [
