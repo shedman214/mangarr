@@ -73,3 +73,34 @@ describe("Backup and restore → Automatic backups", () => {
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
   });
 });
+
+describe("Backup and restore → saving waits for the backup list", () => {
+  it("keeps Save disabled while the saved backups have not loaded", async () => {
+    let release: () => void = () => {};
+    const listLoaded = new Promise<void>((resolve) => { release = resolve; });
+    const calls = fakeApi((method, path) => {
+      if (method === "GET" && path === "/settings/backups/restore") return { body: { pending: false } };
+      if (method === "GET" && path === "/settings/backups/schedule") return { body: schedule };
+      if (method === "GET" && path === "/settings/backups") return { body: saved };
+    });
+    // hold the list request back until released
+    const real = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/v1/settings/backups") await listLoaded;
+      return real(url, init);
+    }));
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+    renderWithClient(<BackupSettings />);
+    const field = await screen.findByLabelText("Delete manual backups after (days)");
+    await userEvent.clear(field);
+    await userEvent.type(field, "30");
+    const save = screen.getByRole("button", { name: "Save automatic backups" });
+    expect(save).toBeDisabled();
+    release();
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+    expect(confirm).toHaveBeenCalledWith("These settings remove 2 saved backups now. Continue?");
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+});
