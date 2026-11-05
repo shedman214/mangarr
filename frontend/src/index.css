@@ -2993,3 +2993,24 @@ kbd {
 .toomics-help li {
   margin-bottom: 4px;
 }
+
+/* Settings → Backup and restore → Automatic backups */
+.automatic-backups {
+  margin: 14px 0 18px;
+}
+
+.backup-status {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 18px;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.backup-status dt {
+  color: var(--text-dim);
+}
+
+.backup-status dd {
+  margin: 0;
+}

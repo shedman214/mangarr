@@ -206,3 +206,53 @@ def restore_pending(data_dir):
                         src.backup(dest)
             raise
     os.replace(pending, folder(root) / f"restored-{uuid.uuid4().hex}.zip")
+
+
+# ------------------------------------------------- retention (Settings → Backup)
+
+AUTOMATIC_REASONS = ("scheduled", "pre-migration")
+
+
+def delete_backup(data_dir, token):
+    """Remove one saved backup. Raises FileNotFoundError when it does not exist."""
+    with _lock:
+        path = archive_path(data_dir, token)
+        if not path.is_file():
+            raise FileNotFoundError(token)
+        path.unlink()
+
+
+def prune_plan(backups, retention_days, manual_retention_days=0, now=None):
+    """Which backups a retention policy removes (pure; nothing is deleted here).
+
+    Automatic backups (scheduled and before-database-update) older than
+    `retention_days` go, but the newest one of each kind always stays. Manual
+    backups are kept unless `manual_retention_days` is above 0; even then the
+    newest backup overall is never removed."""
+    now = time.time() if now is None else now
+    newest_overall = backups[0]["id"] if backups else None
+    newest_auto = {}
+    for b in backups:  # newest first
+        if b["reason"] in AUTOMATIC_REASONS:
+            newest_auto.setdefault(b["reason"], b["id"])
+    doomed = []
+    for b in backups:
+        age_days = (now - (b["created"] or now)) / 86400
+        if b["id"] == newest_overall or b["id"] in newest_auto.values():
+            continue
+        if b["reason"] in AUTOMATIC_REASONS:
+            if age_days > retention_days:
+                doomed.append(b)
+        elif manual_retention_days > 0 and age_days > manual_retention_days:
+            doomed.append(b)
+    return doomed
+
+
+def prune(data_dir, retention_days, manual_retention_days=0, now=None):
+    doomed = prune_plan(list_backups(data_dir), retention_days, manual_retention_days, now)
+    for b in doomed:
+        try:
+            delete_backup(data_dir, b["id"])
+        except FileNotFoundError:
+            pass
+    return doomed

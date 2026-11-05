@@ -515,6 +515,16 @@ current bootstrap key stays unchanged; database API keys and queue records come
 from the backup. Keep the same library mounts. No media files are restored or
 deleted.
 
+## Automatic backups and retention
+
+**Settings → Backup and restore → Automatic backups** works like Sonarr's: Mangarr
+makes a backup every *Interval* days (default 7) and deletes automatic and
+before-database-update backups older than *Keep automatic backups* (default 28
+days). The newest backup of each automatic kind is always kept. Manual backups are
+kept until you delete them, unless you set *Delete manual backups after* (0 = never);
+the newest backup overall is never removed. Saving a policy that would remove
+existing backups asks first. Each saved backup has Download and Delete buttons.
+
 ## Automatic backup before database upgrades
 
 When a new version needs to add tables or columns, Mangarr first saves a backup of
