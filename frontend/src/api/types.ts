@@ -160,6 +160,8 @@ export interface QueueItem {
   error: string;
   created_at: string;
   series_title: string;
+  root_folder_id: number | null;
+  root_folder_path: string;
 }
 
 export interface HistoryItem {

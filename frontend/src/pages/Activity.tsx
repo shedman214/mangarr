@@ -59,6 +59,7 @@ function Queue() {
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [retryNotice, setRetryNotice] = useState("");
   const [filter, setFilter] = useState("");
+  const [rootFilter, setRootFilter] = useState("");
   const [page, setPage] = useState(0);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const { data, isLoading, error, refetch } = useQuery({
@@ -137,13 +138,19 @@ function Queue() {
   if (!data || data.length === 0)
     return <><ErrorNotice error={error} retry={() => void refetch()} /><EmptyState icon="⇅" title="Queue is empty" hint="Grabbed releases will appear here." /></>;
 
-  // only ids still in the queue count (items can finish between refetches)
-  const selectedVisible = data.filter((item) => selected.has(item.id)).map((item) => item.id);
-  const failedItems = data.filter(item => item.status === "failed");
+  const rootKey = (item: QueueItem) => item.root_folder_id != null ? String(item.root_folder_id) : "unassigned";
+  const roots = [...new Map(data.filter(item => item.root_folder_id != null)
+    .map(item => [String(item.root_folder_id), item.root_folder_path] as const)).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  const hasFilter = Boolean(filter.trim() || rootFilter);
+  const matches = data.filter(item => (!rootFilter || rootKey(item) === rootFilter)
+    && `${item.title} ${item.series_title} ${item.source_name}`.toLowerCase().includes(filter.trim().toLowerCase()));
+  // Bulk actions must never include downloads hidden by the current filters.
+  const selectedVisible = matches.filter((item) => selected.has(item.id)).map((item) => item.id);
+  const failedItems = matches.filter(item => item.status === "failed");
   const selectedFailed = failedItems.filter(item => selected.has(item.id));
-  const selectedQueued = data.filter(item => selected.has(item.id) && item.kind === "direct" && item.status === "queued");
+  const selectedQueued = matches.filter(item => selected.has(item.id) && item.kind === "direct" && item.status === "queued");
   const retryBusy = retry.isPending || retryMany.isPending || removeFailed.isPending || removeSelected.isPending || remove.isPending || moveQueue.isPending;
-  const matches = data.filter(item => `${item.title} ${item.series_title} ${item.source_name}`.toLowerCase().includes(filter.trim().toLowerCase()));
   const allSelected = matches.length > 0 && matches.every(item => selected.has(item.id));
   const currentPage = Math.min(page, Math.max(0, Math.ceil(matches.length / 100) - 1));
   const pageItems = matches.slice(currentPage * 100, (currentPage + 1) * 100);
@@ -171,8 +178,18 @@ function Queue() {
       <div className="queue-filter">
         <label htmlFor="queue-filter">Find downloads</label>
         <input id="queue-filter" type="search" placeholder="Manga title or source…" value={filter}
-          onChange={event => { setFilter(event.target.value); setPage(0); }} />
+          onChange={event => { setFilter(event.target.value); setPage(0); setSelected(new Set()); }} />
+        <label htmlFor="queue-root-folder">Root folder</label>
+        <select id="queue-root-folder" value={rootFilter}
+          onChange={event => { setRootFilter(event.target.value); setPage(0); setSelected(new Set()); }}>
+          <option value="">All root folders</option>
+          {roots.map(([id, path]) => <option key={id} value={id}>{path}</option>)}
+          {rootFilter && rootFilter !== "unassigned" && !roots.some(([id]) => id === rootFilter)
+            && <option value={rootFilter}>Selected root folder (no downloads)</option>}
+          <option value="unassigned">Not assigned</option>
+        </select>
       </div>
+      <p className="section-hint">Root folder is the series’ library destination, including where torrent downloads are imported. Filters apply to selection, retries and removal.</p>
       <p className="section-hint">Select queued chapters and click Download now to move them to the front. The current download finishes first. Drag the ↕ handle to change a chapter’s position, or click it to move that chapter to the top. Torrent downloads are managed in qBittorrent.</p>
       <div className="table-actions queue-bulk-actions" role="region" aria-label="Download actions">
         <button
@@ -180,7 +197,7 @@ function Queue() {
           disabled={!matches.length || retryBusy}
           onClick={selectMatches}
         >
-          {allSelected ? "Clear selected" : filter.trim() ? "Select all matches" : "Select all"}
+          {allSelected ? "Clear selected" : hasFilter ? "Select all matches" : "Select all"}
         </button>
         <span>{selectedVisible.length} selected</span>
         <button className="btn primary" disabled={!selectedQueued.length || retryBusy}
@@ -195,21 +212,21 @@ function Queue() {
         </button>
         <button className="btn" disabled={!failedItems.length || retryBusy}
           onClick={() => retryMany.mutate(failedItems)}>
-          Retry all failed ({failedItems.length})
+          {hasFilter ? "Retry failed matches" : "Retry all failed"} ({failedItems.length})
         </button>
         <button className="btn danger" disabled={!failedItems.length || retryBusy}
           onClick={() => {
-            if (confirm(`Remove ${failedItems.length} failed jobs from the queue? No files will be deleted, and active downloads will stay in the queue. Monitored chapters may be downloaded again automatically.`)) {
+            if (confirm(`Remove ${failedItems.length}${hasFilter ? " matching" : ""} failed jobs from the queue? No files will be deleted, and active downloads will stay in the queue. Monitored chapters may be downloaded again automatically.`)) {
               removeFailed.mutate(failedItems.map(item => item.id));
             }
           }}>
-          {removeFailed.isPending ? "Removing failed…" : `Remove failed (${failedItems.length})`}
+          {removeFailed.isPending ? "Removing failed…" : `${hasFilter ? "Remove failed matches" : "Remove failed"} (${failedItems.length})`}
         </button>
         <button
           className="btn danger"
           disabled={selectedVisible.length === 0 || removeSelected.isPending || retryBusy}
           onClick={() => {
-            if (confirmRemove(data.filter((item) => selected.has(item.id)))) removeSelected.mutate(selectedVisible);
+            if (confirmRemove(matches.filter((item) => selected.has(item.id)))) removeSelected.mutate(selectedVisible);
           }}
         >
           {removeSelected.isPending ? "Removing…" : "Remove selected"}
@@ -257,6 +274,7 @@ function Queue() {
               </td>
               <td className="cell-qtitle">
                 {item.title || item.series_title}
+                <div className="queue-destination">Root folder: {item.root_folder_path || "Not assigned"}</div>
                 {item.status === "failed" && item.error && (
                   <div style={{ color: "var(--danger)", fontSize: "0.85em", marginTop: 2 }}>
                     {item.error}

@@ -321,6 +321,8 @@ class QueueItemOut(BaseModel):
     error: str
     created_at: datetime
     series_title: str = ""
+    root_folder_id: int | None = None
+    root_folder_path: str = ""
 
 
 class HistoryOut(BaseModel):

@@ -21,6 +21,7 @@ from ..models import (
     DownloadKind,
     DownloadStatus,
     HistoryEvent,
+    RootFolder,
     Series,
 )
 from ..schemas import GrabIn, HistoryOut, QueueItemOut, QueueRemoveIn, QueueRemoveOut, QueueMoveIn, QueueMoveOut
@@ -42,8 +43,9 @@ async def get_queue(session: AsyncSession = Depends(get_session)):
     now = datetime.now(timezone.utc)
     failed_cutoff = now - FAILED_VISIBLE_FOR
     result = await session.execute(
-        select(Download, Series.title)
+        select(Download, Series.title, RootFolder.id, RootFolder.path)
         .outerjoin(Series, Download.series_id == Series.id)
+        .outerjoin(RootFolder, Series.root_folder_id == RootFolder.id)
         .where(or_(
             Download.status.in_(ACTIVE),
             # user-removed items also carry FAILED, but hiding them is the
@@ -64,9 +66,11 @@ async def get_queue(session: AsyncSession = Depends(get_session)):
         )
     )
     items = []
-    for dl, series_title in result.all():
+    for dl, series_title, root_id, root_path in result.all():
         out = QueueItemOut.model_validate(dl)
         out.series_title = series_title or ""
+        out.root_folder_id = root_id
+        out.root_folder_path = root_path or ""
         items.append(out)
     return items
 

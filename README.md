@@ -444,6 +444,14 @@ not interrupted; failed jobs still use **Retry**, and torrents keep their
 qBittorrent order. Large queues show 100 rows per page. **Select all matches**
 includes every download matching the search, including other pages.
 
+Use **Root folder** to show downloads destined for one library root, such as
+`/manga` or `/dojuin`. Each row shows its series' current root folder; for
+torrents this is the final library destination, not qBittorrent's temporary
+download directory. **Not assigned** shows jobs without a library root.
+Root-folder and text filters work together. Selection, bulk retries and removal
+apply only to matching downloads, including other pages. Changing either filter
+clears the selection so hidden downloads are not changed accidentally.
+
 ## Roadmap
 
 ### Background permission operations
