@@ -41,6 +41,15 @@ RECORD = {
 def test_mangaupdates_id_becomes_mangabakas_base36_key():
     assert mangaupdates_slug(36271319846) == "gnv09ie"
     assert mangaupdates_slug(69874234582) == "w3lbcgm"
+    assert mangaupdates_slug(0) == "0"
+    with pytest.raises(ValueError):
+        mangaupdates_slug(-5)  # would never reach 0
+
+
+async def test_a_negative_mangaupdates_id_is_not_looked_up():
+    client = MangaBakaClient(httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda r: pytest.fail(f"requested {r.url}"))))
+    assert await client.lookup(mangaupdates_id=-1) is None
 
 
 def test_parse_keeps_core_and_defining_tags_without_spoilers():
@@ -168,6 +177,20 @@ async def test_mangabaka_outage_keeps_what_was_stored(monkeypatch, setting):
     before = s.comicinfo_extra
     await tasks.refresh_comicinfo_extra(None, s, SimpleNamespace(publishers=["Other"]))
     assert s.comicinfo_extra == before
+
+
+async def test_a_series_mangabaka_stops_finding_keeps_its_data(monkeypatch, setting):
+    async def lookup(*_):
+        return None
+    monkeypatch.setattr(tasks.mangabaka, "lookup", lookup)
+    s = series()
+    before = s.comicinfo_extra
+    await tasks.refresh_comicinfo_extra(None, s, None)
+    assert s.comicinfo_extra == before
+    # one it never found stays empty, with MangaUpdates' publishers
+    fresh = series(comicinfo_extra="")
+    await tasks.refresh_comicinfo_extra(None, fresh, SimpleNamespace(publishers=["Viz"]))
+    assert json.loads(fresh.comicinfo_extra)["publishers"] == ["Viz"]
 
 
 def test_mangabaka_module_shares_one_client():

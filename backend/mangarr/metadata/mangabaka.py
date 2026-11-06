@@ -38,6 +38,8 @@ _B36 = "0123456789abcdefghijklmnopqrstuvwxyz"
 def mangaupdates_slug(series_id: int) -> str:
     """MangaUpdates' numeric series id in the base-36 form MangaBaka keys on
     (36271319846 → "gnv09ie")."""
+    if series_id < 0:
+        raise ValueError(f"MangaUpdates ids are not negative: {series_id}")
     out = ""
     while series_id:
         series_id, digit = divmod(series_id, 36)
@@ -164,7 +166,7 @@ class MangaBakaClient:
         paths = []
         if anilist_id is not None:
             paths.append(f"/source/anilist/{int(anilist_id)}")
-        if mangaupdates_id is not None:
+        if mangaupdates_id is not None and mangaupdates_id >= 0:
             paths.append(f"/source/manga-updates/{mangaupdates_slug(int(mangaupdates_id))}")
         for path in paths:
             record = await self._by_source(path)

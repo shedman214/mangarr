@@ -251,13 +251,18 @@ async def refresh_series_metadata(session: AsyncSession, series: Series) -> None
 async def refresh_comicinfo_extra(session: AsyncSession, series: Series, mu_meta) -> None:
     """People, publishers, tags and age rating for ComicInfo.xml: MangaBaka
     when enabled, publishers from MangaUpdates whenever it lists them. A
-    MangaBaka outage keeps what was stored before."""
+    MangaBaka outage, or a series it found before going missing there, keeps
+    what was stored; turning the setting off clears the MangaBaka data."""
     extras: ComicExtras | None = ComicExtras()
     covers_on = await settings_service.get(session, "english_volume_covers") == "true"
     metadata_on = await settings_service.get(session, "mangabaka_metadata") == "true"
     if covers_on or metadata_on:
         try:
-            extras = await mangabaka.lookup(series.anilist_id, series.mangaupdates_id) or ComicExtras()
+            extras = await mangabaka.lookup(series.anilist_id, series.mangaupdates_id)
+            if extras is None:
+                if _stored_extra(series).get("mangabaka_id"):
+                    return  # found before, missing now: keep what was stored
+                extras = ComicExtras()
             if not metadata_on:  # looked up for the covers only
                 extras = ComicExtras(mangabaka_id=extras.mangabaka_id)
             if covers_on:
