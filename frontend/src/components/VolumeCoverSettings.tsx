@@ -47,24 +47,22 @@ export function VolumeCoverSettings({ form, setForm, savedOn, dirty }: {
       theirs. This rewrites those chapter files on disk; new downloads are covered at each
       monitor pass.
     </p>
-    {savedOn && on && (
+    {savedOn && on && (<>
       <div className="form-row">
         <label>Existing library</label>
-        <div>
-          <button className="btn" disabled={dirty || job?.running || start.isPending}
-            onClick={() => start.mutate()}>
-            {job?.running ? "Updating covers…" : "Update covers now"}
-          </button>
-          <p className="section-hint" role="status">
-            {start.error ? String((start.error as Error).message)
-              : job?.running ? `Checked ${job.done} of ${job.total} series — ${job.volumes} cover(s) added so far.`
-              : job?.finished_at ? `Last run: ${job.volumes} cover(s) added in ${job.series_changed} series`
-                + (job.failed ? `, ${job.failed} could not be updated (see Logs)` : "")
-                + (job.skipped_busy ? `, ${job.skipped_busy} busy series left for the next monitor pass` : "") + "."
-              : "Checks every series with volume numbers, one at a time in the background, and only rewrites files whose cover is missing or changed."}
-          </p>
-        </div>
+        <button className="btn" disabled={dirty || job?.running || start.isPending}
+          onClick={() => start.mutate()}>
+          {job?.running ? "Updating covers…" : "Update covers now"}
+        </button>
       </div>
-    )}
+      <p className="section-hint" role="status">
+        {start.error ? String((start.error as Error).message)
+          : job?.running ? `Checked ${job.done} of ${job.total} series — ${job.volumes} cover(s) added so far.`
+          : job?.finished_at ? `Last run: ${job.volumes} cover(s) added in ${job.series_changed} series`
+            + (job.failed ? `, ${job.failed} could not be updated (see Logs)` : "")
+            + (job.skipped_busy ? `, ${job.skipped_busy} busy series left for the next monitor pass` : "") + "."
+          : "Checks every series with volume numbers, one at a time in the background, and only rewrites files whose cover is missing or changed."}
+      </p>
+    </>)}
   </div>;
 }
