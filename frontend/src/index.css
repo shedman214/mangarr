@@ -247,6 +247,35 @@ input[type="checkbox"] {
   width: 260px;
 }
 
+/* filters + sort as one group, search and buttons as another: the search shrinks
+   first, then the whole group wraps to a second row instead of pushing
+   Add Series out of view */
+.library-toolbar {
+  height: auto;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  padding-block: 8px;
+}
+
+.library-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.library-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+.library-toolbar .toolbar-search {
+  flex: 0 1 260px;
+  min-width: 160px;
+}
+
 .content {
   flex: 1;
   overflow-y: auto;
@@ -1642,9 +1671,16 @@ h4.link-text:hover {
   }
 
   /* Library toolbar reflows: title + count + Add on top, full-width
-     search next, the three filters sharing the last row */
+     search next, the filters and sort sharing the last row */
+  /* phones keep their own order for every toolbar item */
+  .library-filters,
+  .library-actions {
+    display: contents;
+  }
+
   .library-toolbar .toolbar-search {
     order: 5;
+    flex: 1 1 100%;
     width: 100%;
   }
 
@@ -2284,10 +2320,6 @@ h4.link-text:hover {
   /* Avoid clipping the longer library filter labels on narrow phones. */
   .library-toolbar select {
     flex: 1 1 calc(50% - 4px);
-  }
-
-  .library-toolbar select:last-of-type {
-    flex-basis: 100%;
   }
 
   .modal-actions .btn {
