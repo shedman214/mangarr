@@ -282,8 +282,9 @@ async def edit_series_bulk(body: SeriesEditorIn, session: AsyncSession = Depends
         selectinload(Series.chapters), selectinload(Series.extra_folders),
         selectinload(Series.root_folder),
     )
-    values = await settings_service.get_all(session) if new_root and body.move_files else {}
+    values = await settings_service.get_all(session) if new_root else {}
     out = SeriesEditorOut(updated=0)
+    changed_roots = []
     for series in series_list:
         _apply_monitoring(series, body.monitored, body.monitor_mode, body.monitor_from)
         if new_root is not None and series.root_folder_id != new_root.id:
@@ -296,9 +297,11 @@ async def edit_series_bulk(body: SeriesEditorIn, session: AsyncSession = Depends
                 continue
             if moved:
                 out.moved += 1
-                _notify_kavita(values, series)
+            changed_roots.append(series)
         out.updated += 1
     await session.commit()
+    for series in changed_roots:
+        _notify_kavita(values, series)
     return out
 
 

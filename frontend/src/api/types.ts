@@ -123,6 +123,7 @@ export interface MetadataResult {
   total_chapters: number | null;
   total_volumes: number | null;
   in_library: boolean;
+  in_library_series_id?: number | null;
 }
 
 export interface FolderPreview {

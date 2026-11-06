@@ -57,6 +57,37 @@ async def _edit(session, **kw):
     return await series_api.edit_series_bulk(SeriesEditorIn(**kw), session)
 
 
+@pytest.mark.parametrize("move_files", [False, True])
+async def test_successful_root_changes_notify_kavita_with_new_root(session, roots, monkeypatch, move_files):
+    from unittest.mock import Mock
+    old_root, new_root = RootFolder(path=str(roots[0])), RootFolder(path=str(roots[1]))
+    session.add(new_root)
+    a = await _add(session, "Example", old_root)
+    notify = Mock()
+    monkeypatch.setattr(series_api, "_notify_kavita", notify)
+    out = await _edit(session, series_ids=[a.id], root_folder_id=new_root.id, move_files=move_files)
+    assert not out.problems
+    notify.assert_called_once()
+    assert notify.call_args.args[1].root_folder_id == new_root.id
+    assert notify.call_args.args[1].root_folder.path == str(roots[1])
+    await _edit(session, series_ids=[a.id], root_folder_id=new_root.id)
+    assert notify.call_count == 1
+
+
+async def test_metadata_search_returns_local_id_for_each_provider(session, roots, monkeypatch):
+    from mangarr.api import search
+    from mangarr.metadata.base import SeriesMetadata
+    a = await _add(session, "Example", RootFolder(path=str(roots[0])), mangaupdates_id=123, anilist_id=456)
+    for provider, external_id in [("mangaupdates", 123), ("anilist", 456)]:
+        async def results(*args, **kwargs):
+            return [SeriesMetadata(provider=provider, provider_id=str(external_id), title="Example"),
+                    SeriesMetadata(provider=provider, provider_id="999", title="Other")]
+        monkeypatch.setattr(getattr(search, provider), "search", results)
+        found = await search.metadata_results(session, provider, "Example")
+        assert found[0].in_library and found[0].in_library_series_id == a.id
+        assert not found[1].in_library and found[1].in_library_series_id is None
+
+
 async def test_bulk_monitoring_applies_the_mode_to_every_series(session, roots):
     root = RootFolder(path=str(roots[0]))
     a = await _add(session, "Alpha", root)

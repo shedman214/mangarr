@@ -57,8 +57,8 @@ async def metadata_results(
     id_column = Series.anilist_id if provider == "anilist" else Series.mangaupdates_id
     results = await meta_provider.search(query, limit=limit)
     in_library = {
-        row[0]
-        for row in (await session.execute(select(id_column))).all()
+        row[0]: row[1]
+        for row in (await session.execute(select(id_column, Series.id))).all()
         if row[0] is not None
     }
     return [
@@ -76,6 +76,7 @@ async def metadata_results(
             total_chapters=r.total_chapters,
             total_volumes=r.total_volumes,
             in_library=int(r.provider_id) in in_library,
+            in_library_series_id=in_library.get(int(r.provider_id)),
         )
         for r in results
     ]

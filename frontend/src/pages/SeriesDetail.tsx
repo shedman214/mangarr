@@ -33,6 +33,7 @@ import { AutomationModal, monitorModeLabel } from "../components/SeriesAutomatio
 import { RelatedTitles } from "../components/RelatedTitles";
 import { sanitizeDescription } from "../sanitize";
 import { sourceLabel } from "../sources";
+import { SeriesRootFolder } from "../components/SeriesRootFolder";
 
 export function InteractiveSearch({
   seriesId,
@@ -1217,6 +1218,7 @@ export default function SeriesDetail() {
                 {series.source_links.length ? "Edit sources" : "Add sources"}
               </button>
             </div>
+            <SeriesRootFolder seriesId={seriesId} rootId={series.root_folder_id} folderName={series.folder_name} onChanged={invalidate} />
             <FoldersPanel seriesId={seriesId} onChanged={invalidate} />
           </div>
         </div>

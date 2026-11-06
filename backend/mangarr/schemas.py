@@ -258,6 +258,7 @@ class MetadataResult(BaseModel):
     total_chapters: int | None
     total_volumes: int | None
     in_library: bool = False
+    in_library_series_id: int | None = None
 
 
 class ReleaseOut(BaseModel):

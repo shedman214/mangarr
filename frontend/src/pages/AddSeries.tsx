@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { NavLink, useSearchParams } from "react-router-dom";
+import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { MetadataResult, RootFolder } from "../api/types";
 import { AddSeriesModal } from "../components/AddSeriesModal";
@@ -32,6 +32,7 @@ export function AddTabs() {
 }
 
 export default function AddSeries() {
+  const navigate = useNavigate();
   // ?q= starts a search right away (the command palette's "search MangaUpdates")
   const [params] = useSearchParams();
   const linkedQuery = params.get("q") ?? "";
@@ -97,19 +98,21 @@ export default function AddSeries() {
           <EmptyState icon="🔍" title="No results" hint="Try a different title." />
         ) : (
           results?.map((r) => {
-            const clickable = canAdd && !r.in_library;
+            const libraryPath = r.in_library_series_id ? `/series/${r.in_library_series_id}` : null;
+            const clickable = !!libraryPath || (canAdd && !r.in_library);
+            const open = () => libraryPath ? navigate(libraryPath) : setAdding(r);
             return (
               <div
                 className="search-result"
                 key={r.provider_id}
                 style={clickable ? { cursor: "pointer" } : undefined}
-                title={clickable ? "Add this series" : undefined}
-                onClick={clickable ? () => setAdding(r) : undefined}
-                role={clickable ? "button" : undefined}
+                title={libraryPath ? "Open manga page" : clickable ? "Add this series" : undefined}
+                onClick={clickable ? open : undefined}
+                role={libraryPath ? "link" : clickable ? "button" : undefined}
                 tabIndex={clickable ? 0 : undefined}
-                aria-label={clickable ? `Add ${r.english_title || r.title}` : undefined}
+                aria-label={clickable ? `${libraryPath ? "Open" : "Add"} ${r.english_title || r.title}` : undefined}
                 onKeyDown={clickable ? (event) => {
-                  if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setAdding(r); }
+                  if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
                 } : undefined}
               >
                 {r.cover_url && <img src={r.cover_url} alt="" />}
