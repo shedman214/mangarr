@@ -62,6 +62,9 @@ class Series(Base):
     cover_url: Mapped[str] = mapped_column(String, default="")
     banner_url: Mapped[str] = mapped_column(String, default="")
     genres: Mapped[str] = mapped_column(String, default="")  # comma-separated
+    # ComicInfo extras (people, publishers, tags, age rating) as JSON — see
+    # mangarr.metadata.mangabaka.ComicExtras; "" until the first refresh
+    comicinfo_extra: Mapped[str] = mapped_column(Text, default="")
     total_chapters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_volumes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     monitored: Mapped[bool] = mapped_column(Boolean, default=True)

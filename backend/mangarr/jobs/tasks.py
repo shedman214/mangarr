@@ -4,6 +4,7 @@ processing, qBittorrent sync, and the monitor loop."""
 import asyncio
 import base64
 import binascii
+import json
 import logging
 import re
 import time
@@ -15,7 +16,7 @@ from types import SimpleNamespace
 from sqlalchemy import and_, func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .. import kavita, notifications
+from .. import kavita, notifications, settings_service
 from ..automation import (
     FINISHED_SERIES_MODES,
     MERGED_FILE_SOURCE,
@@ -37,6 +38,7 @@ from ..chapter_metadata import (
     reconcile_decimal_volumes,
 )
 from ..db import session_scope
+from ..download.cbz import series_fields
 from ..download.direct import DuplicateChapterPagesError, download_chapter_to_cbz
 from ..download.qbittorrent import QbtClient
 from ..library.importer import import_torrent_payload
@@ -44,6 +46,7 @@ from ..library.matcher import archive_chapter_numbers, find_series_media_files
 from ..library.naming import chapter_path, series_folder, volume_filename
 from ..library.volume_merge import merge_chapter_archives
 from ..metadata.anilist import provider as anilist
+from ..metadata.mangabaka import ComicExtras, provider as mangabaka
 from ..metadata.mangaupdates import provider as mangaupdates
 from ..models import (
     Chapter,
@@ -240,8 +243,27 @@ async def refresh_series_metadata(session: AsyncSession, series: Series) -> None
             known = set(series.alt_titles.split("\n"))
             extra = [t for t in mu_meta.alt_titles if t and t not in known]
             series.alt_titles = "\n".join(filter(None, [series.alt_titles, *extra]))
+    await refresh_comicinfo_extra(session, series, mu_meta)
     series.metadata_refreshed_at = datetime.now(timezone.utc)
     await session.commit()
+
+
+async def refresh_comicinfo_extra(session: AsyncSession, series: Series, mu_meta) -> None:
+    """People, publishers, tags and age rating for ComicInfo.xml: MangaBaka
+    when enabled, publishers from MangaUpdates whenever it lists them. A
+    MangaBaka outage keeps what was stored before."""
+    extras: ComicExtras | None = ComicExtras()
+    if await settings_service.get(session, "mangabaka_metadata") == "true":
+        try:
+            extras = await mangabaka.lookup(series.anilist_id, series.mangaupdates_id) or ComicExtras()
+        except Exception as exc:
+            log.warning("MangaBaka lookup failed for %r: %s", series.title, exc)
+            extras = None
+    if extras is None:
+        return
+    if mu_meta is not None and mu_meta.publishers:
+        extras.publishers = mu_meta.publishers
+    series.comicinfo_extra = json.dumps(extras.to_dict(), ensure_ascii=False)
 
 
 def _metadata_is_stale(series: Series) -> bool:
@@ -1869,6 +1891,7 @@ async def merge_complete_volumes(
                 [(c.number, Path(c.file_path)) for c in members],
                 dest, series.title, volume,
                 series.description if volume == 1 else "",
+                series_fields(series),
             )
         except Exception as exc:
             log.warning("merge of %r volume %d skipped: %s", series.title, volume, exc)

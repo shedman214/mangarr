@@ -16,6 +16,8 @@ class SeriesMetadata:
     genres: list[str] = field(default_factory=list)
     total_chapters: int | None = None
     total_volumes: int | None = None
+    # original publishers first, then English ones (MangaUpdates only)
+    publishers: list[str] = field(default_factory=list)
 
 
 class MetadataProvider(ABC):
