@@ -378,8 +378,11 @@ async def _remove(
                                      f"({', '.join(unseen)}). Review them again.")
     # own folders missing at planning time: a download still in flight could
     # create one; reported below rather than silently left behind
-    missing = [p for _t, folders in folder_specs(series_list) for p, _s in folders
-               if plan is not None and not p.exists() and not p.is_symlink()]
+    def _missing_now(paths):
+        return [p for p in paths if not p.exists() and not p.is_symlink()]
+
+    own = [p for _t, folders in folder_specs(series_list) for p, _s in folders]
+    missing = await asyncio.to_thread(_missing_now, own) if plan is not None else []
     await _cancel_direct_downloads(session, [series.id for series in series_list])
     for series in series_list:
         await session.delete(series)
@@ -390,8 +393,9 @@ async def _remove(
         # after the rows are gone, so nothing re-imports into a half-deleted folder
         out.deleted, out.problems = await asyncio.to_thread(delete_folders, plan.delete)
         out.refused = _refused_out(plan)
+        appeared = await asyncio.to_thread(lambda: [p for p in missing if p.exists()])
         out.problems += [f"{p}: created during the removal (a download was in progress); not deleted"
-                         for p in missing if p.exists()]
+                         for p in appeared]
     return out
 
 

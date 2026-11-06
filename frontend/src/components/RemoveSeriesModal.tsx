@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
 import { ErrorNotice, Modal } from "./common";
 
 interface Preview {
@@ -48,6 +48,10 @@ export function RemoveSeriesModal({ seriesIds, title, onClose, onRemoved, childr
       ...(deleteFiles ? { confirmed_folders: preview.data?.folders ?? [] } : {}),
     }),
     onSuccess: (result) => (result.problems.length > 0 ? setFailed(result) : onRemoved(result)),
+    // the folders changed since the preview: show the current list to confirm again
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) void preview.refetch();
+    },
   });
   const folders = ready ? (preview.data?.folders ?? []) : [];
 

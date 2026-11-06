@@ -91,11 +91,13 @@ test("the dialog stays open while the removal runs", async () => {
   finish(new Response(JSON.stringify({ count: 1, deleted: [], refused: [], problems: [] }), { headers: { "Content-Type": "application/json" } }));
 });
 
-test("a changed folder list is refused and shown", async () => {
-  fakeApi((method, path) => path === "/series/7/delete-preview" ? { body: PREVIEW }
+test("a changed folder list is refused, shown, and the preview reloaded", async () => {
+  let previews = 0;
+  fakeApi((method, path) => path === "/series/7/delete-preview" ? (previews++, { body: PREVIEW })
     : method === "POST" ? { status: 409, body: { detail: "The folders to delete changed since the preview" } } : undefined);
   renderWithClient(<RemoveSeriesModal seriesIds={[7]} title="Alpha" onClose={() => {}} onRemoved={() => {}} />);
   await userEvent.click(screen.getByRole("checkbox", { name: "Delete files and folders on disk" }));
   await userEvent.click(await screen.findByRole("button", { name: "Remove and delete files" }));
   expect(await screen.findByText(/changed since the preview/)).toBeInTheDocument();
+  await waitFor(() => expect(previews).toBe(2));
 });
