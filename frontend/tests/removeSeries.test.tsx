@@ -8,19 +8,19 @@ const PREVIEW = { folders: ["/manga/Alpha"], refused: [{ path: "/manga/Shared", 
 
 test("files are kept unless the box is ticked", async () => {
   const removed = vi.fn();
-  const calls = fakeApi((method) => (method === "DELETE" ? { body: { count: 1, deleted: [], refused: [], problems: [] } } : undefined));
+  const calls = fakeApi((method) => (method === "POST" ? { body: { count: 1, deleted: [], refused: [], problems: [] } } : undefined));
   renderWithClient(<RemoveSeriesModal seriesIds={[7]} title="Alpha" onClose={() => {}} onRemoved={removed} />);
   expect(screen.getByRole("checkbox", { name: "Delete files and folders on disk" })).not.toBeChecked();
   expect(screen.getByText("Files on disk are kept.")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Remove" }));
   await waitFor(() => expect(removed).toHaveBeenCalled());
-  expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(["DELETE /series/7?delete_files=false"]);
+  expect(calls.map((c) => [c.method, c.path, c.body])).toEqual([["POST", "/series/editor/delete", { series_ids: [7], delete_files: false }]]);
 });
 
 test("ticking it lists the folders that go and those kept, then deletes them", async () => {
   const removed = vi.fn();
   const calls = fakeApi((method, path) => path === "/series/7/delete-preview" ? { body: PREVIEW }
-    : method === "DELETE" ? { body: { count: 1, deleted: ["/manga/Alpha"], refused: PREVIEW.refused, problems: [] } } : undefined);
+    : method === "POST" ? { body: { count: 1, deleted: ["/manga/Alpha"], refused: PREVIEW.refused, problems: [] } } : undefined);
   renderWithClient(<RemoveSeriesModal seriesIds={[7]} title="Alpha" onClose={() => {}} onRemoved={removed} />);
   await userEvent.click(screen.getByRole("checkbox", { name: "Delete files and folders on disk" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("permanently deleted");
@@ -28,7 +28,7 @@ test("ticking it lists the folders that go and those kept, then deletes them", a
   expect(screen.getByText("/manga/Shared")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Remove and delete files" }));
   await waitFor(() => expect(removed).toHaveBeenCalled());
-  expect(calls.find((c) => c.method === "DELETE")?.path).toBe("/series/7?delete_files=true");
+  expect(calls.find((c) => c.method === "POST")?.body).toEqual({ series_ids: [7], delete_files: true, confirmed_folders: ["/manga/Alpha"] });
 });
 
 test("bulk removal sends delete_files with every selected series", async () => {
@@ -37,7 +37,7 @@ test("bulk removal sends delete_files with every selected series", async () => {
   renderWithClient(<RemoveSeriesModal seriesIds={[1, 2]} title="2 series" onClose={() => {}} onRemoved={() => {}} />);
   await userEvent.click(screen.getByRole("checkbox", { name: "Delete files and folders on disk" }));
   await userEvent.click(await screen.findByRole("button", { name: "Remove and delete files" }));
-  await waitFor(() => expect(calls.at(-1)?.body).toEqual({ series_ids: [1, 2], delete_files: true }));
+  await waitFor(() => expect(calls.at(-1)?.body).toEqual({ series_ids: [1, 2], delete_files: true, confirmed_folders: ["/a", "/b"] }));
 });
 
 test("re-ticking waits for a fresh preview, and a failed one blocks removal", async () => {
@@ -59,7 +59,7 @@ test("re-ticking waits for a fresh preview, and a failed one blocks removal", as
 test("folders that could not be deleted are shown before closing", async () => {
   const removed = vi.fn();
   fakeApi((method, path) => path === "/series/7/delete-preview" ? { body: PREVIEW }
-    : method === "DELETE" ? { body: { count: 1, deleted: [], refused: [], problems: ["/manga/Alpha: Permission denied"] } } : undefined);
+    : method === "POST" ? { body: { count: 1, deleted: [], refused: [], problems: ["/manga/Alpha: Permission denied"] } } : undefined);
   renderWithClient(<RemoveSeriesModal seriesIds={[7]} title="Alpha" onClose={() => {}} onRemoved={removed} />);
   await userEvent.click(screen.getByRole("checkbox", { name: "Delete files and folders on disk" }));
   await userEvent.click(await screen.findByRole("button", { name: "Remove and delete files" }));
@@ -76,4 +76,26 @@ test("a shared folder listed twice in a bulk preview renders once per entry with
   await userEvent.click(screen.getByRole("checkbox", { name: "Delete files and folders on disk" }));
   expect(await screen.findAllByText("/s")).toHaveLength(2);
   expect(errors.mock.calls.some((c) => String(c[0]).includes("same key"))).toBe(false);
+});
+
+test("the dialog stays open while the removal runs", async () => {
+  const closed = vi.fn();
+  let finish: (v: Response) => void = () => {};
+  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((r) => { finish = r; })));
+  renderWithClient(<RemoveSeriesModal seriesIds={[7]} title="Alpha" onClose={closed} onRemoved={() => {}} />);
+  await userEvent.click(screen.getByRole("button", { name: "Remove" }));
+  expect(await screen.findByRole("button", { name: "Removing…" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  await userEvent.keyboard("{Escape}");
+  expect(closed).not.toHaveBeenCalled();
+  finish(new Response(JSON.stringify({ count: 1, deleted: [], refused: [], problems: [] }), { headers: { "Content-Type": "application/json" } }));
+});
+
+test("a changed folder list is refused and shown", async () => {
+  fakeApi((method, path) => path === "/series/7/delete-preview" ? { body: PREVIEW }
+    : method === "POST" ? { status: 409, body: { detail: "The folders to delete changed since the preview" } } : undefined);
+  renderWithClient(<RemoveSeriesModal seriesIds={[7]} title="Alpha" onClose={() => {}} onRemoved={() => {}} />);
+  await userEvent.click(screen.getByRole("checkbox", { name: "Delete files and folders on disk" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Remove and delete files" }));
+  expect(await screen.findByText(/changed since the preview/)).toBeInTheDocument();
 });

@@ -40,9 +40,13 @@ export function RemoveSeriesModal({ seriesIds, title, onClose, onRemoved, childr
   // only a preview that finished fetching may be acted on
   const ready = !deleteFiles || (preview.isSuccess && preview.fetchStatus === "idle");
   const remove = useMutation({
-    mutationFn: () => single
-      ? api.del<RemoveResult>(`/series/${seriesIds[0]}?delete_files=${deleteFiles}`)
-      : api.post<RemoveResult>("/series/editor/delete", { series_ids: seriesIds, delete_files: deleteFiles }),
+    // the folders shown are the only ones the server may delete: if its fresh
+    // plan differs it refuses (409) and nothing is removed
+    mutationFn: () => api.post<RemoveResult>("/series/editor/delete", {
+      series_ids: seriesIds,
+      delete_files: deleteFiles,
+      ...(deleteFiles ? { confirmed_folders: preview.data?.folders ?? [] } : {}),
+    }),
     onSuccess: (result) => (result.problems.length > 0 ? setFailed(result) : onRemoved(result)),
   });
   const folders = ready ? (preview.data?.folders ?? []) : [];
@@ -50,11 +54,18 @@ export function RemoveSeriesModal({ seriesIds, title, onClose, onRemoved, childr
   if (failed) {
     return (
       <Modal title={`Removed ${title}`} onClose={() => onRemoved(failed)}>
-        <p role="alert" className="remove-files-warning">
-          Removed from Mangarr, but some folders could not be deleted:
-        </p>
-        <ul className="remove-files-preview">{failed.problems.map((p, i) => <li key={i}><code>{p}</code></li>)}</ul>
-        {failed.deleted.length > 0 && <p className="section-hint">Deleted: {failed.deleted.join(", ")}</p>}
+        <div className="remove-files-preview">
+          <p role="alert" className="remove-files-warning">
+            Removed from Mangarr, but some folders could not be deleted:
+          </p>
+          <ul>{failed.problems.map((p, i) => <li key={i}><code>{p}</code></li>)}</ul>
+          {failed.deleted.length > 0 && (
+            <>
+              <p className="section-hint">Deleted:</p>
+              <ul>{failed.deleted.map((p, i) => <li key={i}><code>{p}</code></li>)}</ul>
+            </>
+          )}
+        </div>
         <div className="modal-actions">
           <button className="btn" onClick={() => onRemoved(failed)}>Close</button>
         </div>
@@ -63,7 +74,7 @@ export function RemoveSeriesModal({ seriesIds, title, onClose, onRemoved, childr
   }
 
   return (
-    <Modal title={`Remove ${title}`} onClose={onClose}>
+    <Modal title={`Remove ${title}`} onClose={() => { if (!remove.isPending) onClose(); }}>
       <p>Remove {single ? `“${title}”` : title} from Mangarr?</p>
       {children}
       <label className="remove-files-option">
@@ -96,7 +107,7 @@ export function RemoveSeriesModal({ seriesIds, title, onClose, onRemoved, childr
       )}
       <ErrorNotice error={preview.error ?? remove.error} />
       <div className="modal-actions">
-        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn" disabled={remove.isPending} onClick={onClose}>Cancel</button>
         <button className="btn danger" disabled={remove.isPending || !ready}
           onClick={() => remove.mutate()}>
           {remove.isPending ? "Removing…" : deleteFiles && folders.length > 0 ? "Remove and delete files" : "Remove"}

@@ -363,9 +363,23 @@ def _refused_out(plan) -> list[RefusedFolderOut]:
     return [RefusedFolderOut(path=str(p), reason=r) for p, r in plan.refused]
 
 
-async def _remove(session: AsyncSession, series_list: list[Series], delete_files: bool) -> SeriesDeleteOut:
+async def _remove(
+    session: AsyncSession, series_list: list[Series], delete_files: bool,
+    confirmed: list[str] | None = None,
+) -> SeriesDeleteOut:
+    from ..library.series_delete import folder_specs
+
     out = SeriesDeleteOut(count=len(series_list))
     plan = await _folder_plan(session, series_list) if delete_files else None
+    if plan is not None and confirmed is not None:
+        unseen = [str(p) for p in plan.delete if str(p) not in set(confirmed)]
+        if unseen:
+            raise HTTPException(409, "The folders to delete changed since the preview "
+                                     f"({', '.join(unseen)}). Review them again.")
+    # own folders missing at planning time: a download still in flight could
+    # create one; reported below rather than silently left behind
+    missing = [p for _t, folders in folder_specs(series_list) for p, _s in folders
+               if plan is not None and not p.exists() and not p.is_symlink()]
     await _cancel_direct_downloads(session, [series.id for series in series_list])
     for series in series_list:
         await session.delete(series)
@@ -376,6 +390,8 @@ async def _remove(session: AsyncSession, series_list: list[Series], delete_files
         # after the rows are gone, so nothing re-imports into a half-deleted folder
         out.deleted, out.problems = await asyncio.to_thread(delete_folders, plan.delete)
         out.refused = _refused_out(plan)
+        out.problems += [f"{p}: created during the removal (a download was in progress); not deleted"
+                         for p in missing if p.exists()]
     return out
 
 
@@ -393,12 +409,16 @@ async def delete_series_bulk(body: SeriesDeleteIn, session: AsyncSession = Depen
 
     # every series' lock, in id order (so two bulk removals can't deadlock),
     # held through removal: an import holding one can't recreate a folder
+    # only existing series get a lock (no lock objects for made-up ids)
+    existing = (await session.execute(
+        select(Series.id).where(Series.id.in_(body.series_ids))
+    )).scalars().all()
     locks = []
     try:
-        for series_id in sorted(set(body.series_ids)):
+        for series_id in sorted(set(existing)):
             locks.append(await acquire_series_lock(series_id))
         series_list = await _series_in_order(session, body.series_ids, *_FOLDER_OPTIONS)
-        return await _remove(session, series_list, body.delete_files)
+        return await _remove(session, series_list, body.delete_files, body.confirmed_folders)
     finally:
         for lock in locks:
             lock.release()
@@ -488,6 +508,8 @@ async def delete_series(
     then its own folders are deleted (never a root or a shared folder)."""
     from ..jobs.tasks import acquire_series_lock
 
+    if await session.get(Series, series_id) is None:  # no lock for a made-up id
+        raise HTTPException(404, "Series not found")
     lock = await acquire_series_lock(series_id)
     try:
         series_list = await _series_in_order(session, [series_id], *_FOLDER_OPTIONS)

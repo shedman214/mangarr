@@ -133,3 +133,51 @@ async def test_a_folder_reached_through_a_symlinked_parent_is_one_folder(session
     series = await add(session, root, "Zeta", extras=[("alias/Zeta", None)])
     out = await series_api.delete_series(series.id, session, delete_files=True)
     assert out.deleted == [str(real)] and out.problems == [] and not real.exists()
+
+
+async def test_a_folder_holding_another_root_is_never_deleted(session, tmp_path):
+    data = RootFolder(path=str(tmp_path / "data"))
+    session.add(RootFolder(path=str(tmp_path / "data" / "Theta" / "archive")))
+    theta = folder(tmp_path / "data" / "Theta")
+    nested_root = folder(tmp_path / "data" / "Theta" / "archive")
+    series = await add(session, data, "Theta")
+    out = await series_api.delete_series(series.id, session, delete_files=True)
+    assert out.deleted == [] and theta.exists() and nested_root.exists()
+    assert [r.reason for r in out.refused] == ["it contains another root folder"]
+
+
+async def test_unconfirmed_folders_stop_the_removal_before_anything_changes(session, tmp_path):
+    root = RootFolder(path=str(tmp_path / "manga"))
+    a = folder(tmp_path / "manga" / "Iota")
+    series = await add(session, root, "Iota")
+    with pytest.raises(series_api.HTTPException) as err:
+        await series_api.delete_series_bulk(
+            SeriesDeleteIn(series_ids=[series.id], delete_files=True, confirmed_folders=[]), session)
+    assert err.value.status_code == 409
+    assert a.exists() and await titles(session) == ["Iota"]
+    out = await series_api.delete_series_bulk(
+        SeriesDeleteIn(series_ids=[series.id], delete_files=True, confirmed_folders=[str(a)]), session)
+    assert out.deleted == [str(a)]
+
+
+async def test_unknown_ids_get_no_lock(session):
+    from mangarr.jobs import tasks
+    before = set(tasks._SERIES_LOCKS)
+    await series_api.delete_series_bulk(SeriesDeleteIn(series_ids=[987654, 987655]), session)
+    with pytest.raises(series_api.HTTPException):
+        await series_api.delete_series(987656, session)
+    assert set(tasks._SERIES_LOCKS) == before
+
+
+async def test_a_folder_created_by_an_in_flight_download_is_reported(session, tmp_path, monkeypatch):
+    root = RootFolder(path=str(tmp_path / "manga"))
+    folder(tmp_path / "manga")
+    series = await add(session, root, "Kappa")  # its folder does not exist yet
+    real_cancel = series_api._cancel_direct_downloads
+
+    async def cancel_while_a_download_writes(*args):
+        folder(tmp_path / "manga" / "Kappa")  # the in-flight chapter lands now
+        await real_cancel(*args)
+    monkeypatch.setattr(series_api, "_cancel_direct_downloads", cancel_while_a_download_writes)
+    out = await series_api.delete_series(series.id, session, delete_files=True)
+    assert out.deleted == [] and len(out.problems) == 1 and "download was in progress" in out.problems[0]

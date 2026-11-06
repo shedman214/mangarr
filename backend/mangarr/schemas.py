@@ -222,6 +222,9 @@ class SeriesBulkOut(BaseModel):
 class SeriesDeleteIn(SeriesBulkIn):
     # also delete each series' own folders on disk (see library.series_delete)
     delete_files: bool = False
+    # the folders the user saw in the preview; when given, the removal is
+    # refused (nothing changes) if the fresh plan would delete any other
+    confirmed_folders: list[str] | None = None
 
 
 class RefusedFolderOut(BaseModel):

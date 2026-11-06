@@ -87,6 +87,9 @@ def plan_folder_deletion(doomed, others, roots: list[str]) -> FolderPlan:
             if not any(root in real.parents for root in root_paths):
                 refuse(path, "it is outside the root folders")
                 continue
+            if any(real in root.parents for root in root_paths):
+                refuse(path, "it contains another root folder")
+                continue
             if shared:
                 refuse(path, "it is a shared folder")
                 continue
