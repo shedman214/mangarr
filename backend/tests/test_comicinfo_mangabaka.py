@@ -130,7 +130,7 @@ def test_a_comma_inside_a_name_does_not_split_it():
 
 @pytest.fixture
 def setting(monkeypatch):
-    value = {"mangabaka_metadata": "true"}
+    value = {"mangabaka_metadata": "true", "english_volume_covers": "false"}
 
     async def get(_session, key):
         return value[key]

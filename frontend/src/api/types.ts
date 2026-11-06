@@ -213,6 +213,14 @@ export interface ScanResult {
   unmatched: string[];
 }
 
+export interface VolumeCoversResult {
+  added: number[];
+  removed: number;
+  unchanged: number;
+  missing: number[];
+  failed: string[];
+}
+
 export interface VolumeResyncResult {
   has_data: boolean;
   assigned: number;

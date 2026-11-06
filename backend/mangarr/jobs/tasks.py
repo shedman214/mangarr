@@ -253,9 +253,17 @@ async def refresh_comicinfo_extra(session: AsyncSession, series: Series, mu_meta
     when enabled, publishers from MangaUpdates whenever it lists them. A
     MangaBaka outage keeps what was stored before."""
     extras: ComicExtras | None = ComicExtras()
-    if await settings_service.get(session, "mangabaka_metadata") == "true":
+    covers_on = await settings_service.get(session, "english_volume_covers") == "true"
+    metadata_on = await settings_service.get(session, "mangabaka_metadata") == "true"
+    if covers_on or metadata_on:
         try:
             extras = await mangabaka.lookup(series.anilist_id, series.mangaupdates_id) or ComicExtras()
+            if not metadata_on:  # looked up for the covers only
+                extras = ComicExtras(mangabaka_id=extras.mangabaka_id)
+            if covers_on:
+                if extras.mangabaka_id:
+                    extras.volume_covers = await mangabaka.english_volume_covers(extras.mangabaka_id)
+                extras.volume_covers_checked = True
         except Exception as exc:
             log.warning("MangaBaka lookup failed for %r: %s", series.title, exc)
             extras = None
@@ -264,6 +272,106 @@ async def refresh_comicinfo_extra(session: AsyncSession, series: Series, mu_meta
     if mu_meta is not None and mu_meta.publishers:
         extras.publishers = mu_meta.publishers
     series.comicinfo_extra = json.dumps(extras.to_dict(), ensure_ascii=False)
+
+
+async def apply_volume_covers(
+    session: AsyncSession, series: Series, values: dict[str, str], refresh: bool = False,
+):
+    """Settings → English volume covers: each volume's first chapter file gets
+    its English cover (see library.volume_covers). `refresh` looks the covers
+    up again first (the series page button); otherwise the list from the last
+    metadata refresh is used. Call with the series lock held. Returns the
+    CoverResult, or None while the setting is off."""
+    from ..library.volume_covers import fetch_cover, sync
+
+    if values.get("english_volume_covers") != "true":
+        return None
+    if refresh or not _stored_extra(series).get("volume_covers_checked"):
+        # keeps the MangaUpdates publishers the last metadata refresh stored
+        kept = SimpleNamespace(publishers=_stored_extra(series).get("publishers") or [])
+        await refresh_comicinfo_extra(session, series, kept)
+        await session.commit()
+    covers = _stored_extra(series).get("volume_covers") or {}
+    result = await asyncio.to_thread(sync, _active_chapters_of(series), covers, fetch_cover)
+    if result.added or result.removed:
+        session.add(HistoryEvent(
+            series_id=series.id, event="volume_covers",
+            detail=f"English cover added to volume(s) {', '.join(map(str, result.added)) or '-'}"
+                   + (f"; {result.removed} moved off later chapter files" if result.removed else ""),
+        ))
+        await session.commit()
+        _notify_kavita(values, series)
+    return result
+
+
+# Settings → English volume covers → Update covers now: one library-wide pass
+COVERS_JOB: dict = {"running": False, "done": 0, "total": 0, "series_changed": 0,
+                    "volumes": 0, "failed": 0, "skipped_busy": 0,
+                    "started_at": None, "finished_at": None}
+COVERS_PAUSE_SECONDS = 0.2  # between series, so the pass stays in the background
+
+
+async def update_all_volume_covers() -> None:
+    """Look every series' English covers up again and apply them, one series
+    at a time. Cheap per file: only the archive's directory is read unless a
+    cover has to be written. Series busy with another job are skipped (the
+    monitor pass applies theirs). Stops if the setting is turned off."""
+    if COVERS_JOB["running"]:
+        return
+    COVERS_JOB.update(running=True, done=0, total=0, series_changed=0, volumes=0, failed=0,
+                      skipped_busy=0, started_at=datetime.now(timezone.utc).isoformat(),
+                      finished_at=None)
+    try:
+        async with session_scope() as session:
+            # only series with a chapter file that has a volume number
+            ids = (await session.execute(
+                select(Chapter.series_id).where(
+                    Chapter.downloaded == True,  # noqa: E712
+                    Chapter.volume.isnot(None), Chapter.file_path != "",
+                ).distinct()
+            )).scalars().all()
+        COVERS_JOB["total"] = len(ids)
+        for series_id in ids:
+            lock = await try_acquire_series_lock(series_id)
+            if lock is None:
+                COVERS_JOB["skipped_busy"] += 1
+            else:
+                try:
+                    async with session_scope() as session:
+                        values = await settings_service.get_all(session)
+                        if values.get("english_volume_covers") != "true":
+                            break
+                        series = await _load_series(session, series_id)
+                        if series is not None:
+                            result = await apply_volume_covers(session, series, values, refresh=True)
+                            if result is not None:
+                                if result.added or result.removed:
+                                    COVERS_JOB["series_changed"] += 1
+                                COVERS_JOB["volumes"] += len(result.added)
+                                COVERS_JOB["failed"] += len(result.failed)
+                except Exception:
+                    COVERS_JOB["failed"] += 1
+                    log.exception("volume covers failed for series %d", series_id)
+                finally:
+                    lock.release()
+            COVERS_JOB["done"] += 1
+            await asyncio.sleep(COVERS_PAUSE_SECONDS)
+    finally:
+        COVERS_JOB.update(running=False, finished_at=datetime.now(timezone.utc).isoformat())
+        log.info("Volume covers pass: %(volumes)d cover(s) in %(series_changed)d series, "
+                 "%(failed)d failure(s), %(skipped_busy)d busy", COVERS_JOB)
+
+
+def _stored_extra(series: Series) -> dict:
+    try:
+        extra = json.loads(series.comicinfo_extra or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return extra if isinstance(extra, dict) else {}
+
+
+def _active_chapters_of(series: Series) -> list[Chapter]:
+    return [c for c in series.chapters if not c.excluded]
 
 
 def _metadata_is_stale(series: Series) -> bool:
@@ -2009,6 +2117,12 @@ async def monitor_all() -> None:
                         log.warning("volume merge failed for series %d: %s", series_id, exc)
                         # the rollback expired the series; leave the pass's
                         # bookkeeping to the next one rather than reload it
+                        await session.rollback()
+                        continue
+                    try:
+                        await apply_volume_covers(session, series, values)
+                    except Exception as exc:
+                        log.warning("volume covers failed for series %d: %s", series_id, exc)
                         await session.rollback()
                         continue
                     series.last_monitored_at = datetime.now(timezone.utc)

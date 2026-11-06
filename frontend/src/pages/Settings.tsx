@@ -18,6 +18,7 @@ import ToomicsCookieTest from "../components/ToomicsCookieTest";
 import { LogSettings } from "../components/LogSettings";
 import { UpgradeSettings } from "../components/UpgradeSettings";
 import { AdultContentSettings } from "../components/AdultContentSettings";
+import { VolumeCoverSettings } from "../components/VolumeCoverSettings";
 
 function RootFolders() {
   const queryClient = useQueryClient();
@@ -690,6 +691,8 @@ export default function Settings() {
             them. Picked up at each series&apos; next metadata refresh; files already on disk keep
             their current ComicInfo.
           </p>
+          <VolumeCoverSettings form={form} setForm={setForm} dirty={dirty}
+            savedOn={saved?.english_volume_covers === "true"} />
         </div>
 
         <div className="settings-section">

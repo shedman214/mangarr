@@ -18,6 +18,15 @@ from ..util import has_chapter_marker, parse_chapter_number, parse_volume_number
 
 ARCHIVE_EXTS = {".cbz", ".zip", ".cbr", ".rar", ".cb7", ".7z"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+
+# the English volume cover mangarr adds as an archive's first image (see
+# library.volume_covers); it is not one of the chapter's pages
+VOLUME_COVER_STEM = "000_cover"
+
+
+def is_volume_cover(name: str) -> bool:
+    path = Path(name)
+    return path.parent == Path(".") and path.stem == VOLUME_COVER_STEM
 SIDECAR_IMAGE_STEMS = {
     "banner", "cover", "fanart", "folder", "poster", "thumb", "thumbnail",
 }
@@ -195,7 +204,7 @@ def _archive_chapter_numbers(path: str, mtime_ns: int, size: int) -> frozenset[f
         with zipfile.ZipFile(path) as archive:
             for member in archive.infolist():
                 name = Path(member.filename)
-                if member.is_dir() or name.suffix.lower() not in IMAGE_EXTS:
+                if member.is_dir() or name.suffix.lower() not in IMAGE_EXTS or is_volume_cover(member.filename):
                     continue
                 if not has_chapter_marker(name.stem):
                     return None
@@ -240,6 +249,7 @@ def _archive_page_signature(path: str, mtime_ns: int, size: int) -> PageSignatur
                 (member.CRC, member.file_size)
                 for member in archive.infolist()
                 if not member.is_dir() and Path(member.filename).suffix.lower() in IMAGE_EXTS
+                and not is_volume_cover(member.filename)
             )
     except (OSError, zipfile.BadZipFile):
         return None

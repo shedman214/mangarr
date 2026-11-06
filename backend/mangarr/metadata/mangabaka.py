@@ -57,6 +57,10 @@ class ComicExtras:
     genres: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     age_rating: str = ""
+    # English front covers by volume number ("3" → {"id": …, "url": …}); only
+    # filled while Settings → English volume covers is on
+    volume_covers: dict[str, dict] = field(default_factory=dict)
+    volume_covers_checked: bool = False  # looked up, even if none were listed
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -129,6 +133,28 @@ class MangaBakaClient:
             if merged:
                 record = await self._get(f"/series/{int(merged)}")
         return record
+
+    async def english_volume_covers(self, mangabaka_id: int) -> dict[str, dict]:
+        """English front covers of whole-numbered volumes, the first one
+        listed per volume (other editions' covers are skipped)."""
+        covers: dict[str, dict] = {}
+        for page in range(1, 21):  # 50 a page; 1,000 covers is far past any series
+            data = await self._get(
+                f"/series/{int(mangabaka_id)}/images?type=volume&language=en&limit=50&page={page}"
+            )
+            items = data if isinstance(data, list) else []
+            for item in items:
+                number = item.get("index_numeric")
+                url = ((item.get("image") or {}).get("raw") or {}).get("url") or ""
+                if (
+                    item.get("type") == "volume" and item.get("language") == "en"
+                    and isinstance(number, (int, float)) and float(number).is_integer()
+                    and number > 0 and url.startswith("https://")
+                ):
+                    covers.setdefault(str(int(number)), {"id": item.get("id"), "url": url})
+            if len(items) < 50:
+                break
+        return covers
 
     async def lookup(
         self, anilist_id: int | None = None, mangaupdates_id: int | None = None

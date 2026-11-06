@@ -47,6 +47,7 @@ from ..schemas import (
     SourceLinkIn,
     SourceLinkOut,
     VolumeCandidateOut,
+    VolumeCoversOut,
     VolumeDiffRowOut,
     VolumeMappingRowOut,
     VolumeResyncIn,
@@ -135,6 +136,46 @@ def _require_series_media_path(series: Series, raw_path: str) -> Path:
     if not path.exists():
         raise HTTPException(400, "File not found on disk")
     return path
+
+
+# ------------------------------------------------------------ volume covers
+
+@router.post("/series/{series_id}/volume-covers", response_model=VolumeCoversOut)
+async def volume_covers(series_id: int, session: AsyncSession = Depends(get_session)):
+    """Settings → English volume covers, for this series now: looks the
+    covers up again and puts each into its volume's first chapter file."""
+    from ..jobs.tasks import acquire_series_lock, apply_volume_covers
+
+    values = await settings_service.get_all(session)
+    if values.get("english_volume_covers") != "true":
+        raise HTTPException(409, "Turn on English volume covers in Settings → Media Management first.")
+    lock = await acquire_series_lock(series_id)
+    try:
+        series = await _load(session, series_id)
+        await _require_root_available(session, series)
+        result = await apply_volume_covers(session, series, values, refresh=True)
+        return VolumeCoversOut(added=result.added, removed=result.removed, unchanged=result.unchanged,
+                               missing=result.missing, failed=result.failed)
+    finally:
+        lock.release()
+
+
+@router.post("/settings/volume-covers/update", status_code=202)
+async def volume_covers_update_all(session: AsyncSession = Depends(get_session)):
+    from ..jobs.tasks import COVERS_JOB, update_all_volume_covers
+
+    if await settings_service.get(session, "english_volume_covers") != "true":
+        raise HTTPException(409, "Turn on English volume covers and save first.")
+    if not COVERS_JOB["running"]:
+        asyncio.get_running_loop().create_task(update_all_volume_covers())
+    return {"status": "running"}
+
+
+@router.get("/settings/volume-covers/status")
+async def volume_covers_status():
+    from ..jobs.tasks import COVERS_JOB
+
+    return dict(COVERS_JOB)
 
 
 # ------------------------------------------------------------------ scan
