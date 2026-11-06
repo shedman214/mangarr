@@ -51,7 +51,10 @@ export function VolumeCoverSettings({ form, setForm, savedOn, dirty }: {
       <div className="form-row">
         <label>Existing library</label>
         <button className="btn" disabled={dirty || job?.running || start.isPending}
-          onClick={() => start.mutate()}>
+          onClick={() => {
+            if (confirm("Rewrite chapter files in every series with volume numbers? Each volume's first "
+              + "chapter file gets its English cover from MangaBaka.")) start.mutate();
+          }}>
           {job?.running ? "Updating covers…" : "Update covers now"}
         </button>
       </div>

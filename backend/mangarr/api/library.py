@@ -160,6 +160,10 @@ async def volume_covers(series_id: int, session: AsyncSession = Depends(get_sess
         lock.release()
 
 
+# the loop only holds weak references to tasks; keep the long pass alive
+_background_tasks: set[asyncio.Task] = set()
+
+
 @router.post("/settings/volume-covers/update", status_code=202)
 async def volume_covers_update_all(session: AsyncSession = Depends(get_session)):
     from ..jobs.tasks import COVERS_JOB, update_all_volume_covers
@@ -167,7 +171,9 @@ async def volume_covers_update_all(session: AsyncSession = Depends(get_session))
     if await settings_service.get(session, "english_volume_covers") != "true":
         raise HTTPException(409, "Turn on English volume covers and save first.")
     if not COVERS_JOB["running"]:
-        asyncio.get_running_loop().create_task(update_all_volume_covers())
+        task = asyncio.get_running_loop().create_task(update_all_volume_covers())
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
     return {"status": "running"}
 
 

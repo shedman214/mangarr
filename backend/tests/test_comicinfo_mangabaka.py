@@ -132,6 +132,11 @@ def test_missing_data_is_left_out():
     assert fields["count"] == 207 and fields["publishers"] == []
 
 
+def test_stored_values_that_are_not_text_are_skipped():
+    root = fromstring(build_comicinfo("X", publishers=["Viz", 5, None, ""], tags=[{"a": 1}, "Swords"]))
+    assert root.findtext("Publisher") == "Viz" and root.findtext("Tags") == "Swords"
+
+
 def test_a_comma_inside_a_name_does_not_split_it():
     root = fromstring(build_comicinfo("X", publishers=["Kodansha, Ltd.", "Viz"]))
     assert root.findtext("Publisher") == "Kodansha  Ltd., Viz"
@@ -184,9 +189,11 @@ async def test_a_series_mangabaka_stops_finding_keeps_its_data(monkeypatch, sett
         return None
     monkeypatch.setattr(tasks.mangabaka, "lookup", lookup)
     s = series()
-    before = s.comicinfo_extra
-    await tasks.refresh_comicinfo_extra(None, s, None)
-    assert s.comicinfo_extra == before
+    before = json.loads(s.comicinfo_extra)
+    await tasks.refresh_comicinfo_extra(None, s, SimpleNamespace(publishers=["Shueisha", "Viz"]))
+    after = json.loads(s.comicinfo_extra)
+    assert after["publishers"] == ["Shueisha", "Viz"]  # MangaUpdates still updates them
+    assert {**after, "publishers": before["publishers"]} == before
     # one it never found stays empty, with MangaUpdates' publishers
     fresh = series(comicinfo_extra="")
     await tasks.refresh_comicinfo_extra(None, fresh, SimpleNamespace(publishers=["Viz"]))

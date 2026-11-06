@@ -260,9 +260,10 @@ async def refresh_comicinfo_extra(session: AsyncSession, series: Series, mu_meta
         try:
             extras = await mangabaka.lookup(series.anilist_id, series.mangaupdates_id)
             if extras is None:
-                if _stored_extra(series).get("mangabaka_id"):
-                    return  # found before, missing now: keep what was stored
-                extras = ComicExtras()
+                # found before, missing now: keep the stored data (publishers
+                # still update from MangaUpdates below)
+                stored = _stored_extra(series)
+                extras = ComicExtras.from_dict(stored) if stored.get("mangabaka_id") else ComicExtras()
             if not metadata_on:  # looked up for the covers only
                 extras = ComicExtras(mangabaka_id=extras.mangabaka_id)
             if covers_on:
