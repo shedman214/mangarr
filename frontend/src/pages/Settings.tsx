@@ -18,6 +18,7 @@ import ToomicsCookieTest from "../components/ToomicsCookieTest";
 import { LogSettings } from "../components/LogSettings";
 import { UpgradeSettings } from "../components/UpgradeSettings";
 import { AdultContentSettings } from "../components/AdultContentSettings";
+import { ComicInfoSettings } from "../components/ComicInfoSettings";
 
 function RootFolders() {
   const queryClient = useQueryClient();
@@ -676,20 +677,7 @@ export default function Settings() {
           <p className="section-hint">
             Applies once a series is finished or cancelled and every monitored chapter is on disk.
           </p>
-          <div className="form-row">
-            <label>ComicInfo from MangaBaka</label>
-            <Toggle label="ComicInfo from MangaBaka" on={(form.mangabaka_metadata ?? "true") === "true"}
-              onChange={(v) => setForm({ ...form, mangabaka_metadata: v ? "true" : "false" })} />
-          </div>
-          <p className="section-hint">
-            Each downloaded file's ComicInfo.xml carries the publisher, genres, release year and
-            publication status Kavita and Komga show. On (default): writers, artists, tags, age
-            rating and AniList/MangaBaka links are added too, from{" "}
-            <a href="https://mangabaka.org" target="_blank" rel="noreferrer">MangaBaka</a>, looked up by
-            the series&apos; AniList or MangaUpdates id. Publishers come from MangaUpdates when it lists
-            them. Picked up at each series&apos; next metadata refresh; files already on disk keep
-            their current ComicInfo.
-          </p>
+          <ComicInfoSettings form={form} setForm={setForm} />
         </div>
 
         <div className="settings-section">

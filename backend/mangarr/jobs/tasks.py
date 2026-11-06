@@ -251,11 +251,18 @@ async def refresh_series_metadata(session: AsyncSession, series: Series) -> None
 async def refresh_comicinfo_extra(session: AsyncSession, series: Series, mu_meta) -> None:
     """People, publishers, tags and age rating for ComicInfo.xml: MangaBaka
     when enabled, publishers from MangaUpdates whenever it lists them. A
-    MangaBaka outage keeps what was stored before."""
+    MangaBaka outage, or a series it found before going missing there, keeps
+    what was stored; turning the setting off clears the MangaBaka data."""
     extras: ComicExtras | None = ComicExtras()
     if await settings_service.get(session, "mangabaka_metadata") == "true":
         try:
-            extras = await mangabaka.lookup(series.anilist_id, series.mangaupdates_id) or ComicExtras()
+            extras = await mangabaka.lookup(series.anilist_id, series.mangaupdates_id)
+            if extras is None:
+                try:
+                    known = json.loads(series.comicinfo_extra or "{}").get("mangabaka_id")
+                except (TypeError, ValueError, AttributeError):
+                    known = None
+                extras = None if known else ComicExtras()
         except Exception as exc:
             log.warning("MangaBaka lookup failed for %r: %s", series.title, exc)
             extras = None
