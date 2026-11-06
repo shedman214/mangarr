@@ -44,6 +44,10 @@ DEFAULTS: dict[str, str] = {
     # pornographic rating, FanFox and Toonily get their over-18 confirmation and
     # WeebCentral searches adult titles too. Off by default; the user opts in.
     "adult_content": "false",
+    # Fill ComicInfo.xml's writers, artists, tags, age rating and web link
+    # from MangaBaka (looked up by the series' AniList/MangaUpdates id) so
+    # Kavita and Komga show them. Publishers prefer MangaUpdates either way.
+    "mangabaka_metadata": "true",
     # MangaDex credentials (personal API client)
     "mangadex_client_id": "",
     "mangadex_client_secret": "",
@@ -145,6 +149,8 @@ def validate(values: dict[str, str]) -> None:
     parse(values)
     if values.get("adult_content", "false") not in ("true", "false"):
         raise ValueError("adult_content must be true or false")
+    if values.get("mangabaka_metadata", "true") not in ("true", "false"):
+        raise ValueError("mangabaka_metadata must be true or false")
     if values.get("upgrades_allowed", "false") not in ("true", "false"):
         raise ValueError("upgrades_allowed must be true or false")
     if values.get("upgrade_until", "") not in ("", *DISCOVERY_SOURCE_NAMES):

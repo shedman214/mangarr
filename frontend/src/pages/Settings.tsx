@@ -18,6 +18,7 @@ import ToomicsCookieTest from "../components/ToomicsCookieTest";
 import { LogSettings } from "../components/LogSettings";
 import { UpgradeSettings } from "../components/UpgradeSettings";
 import { AdultContentSettings } from "../components/AdultContentSettings";
+import { ComicInfoSettings } from "../components/ComicInfoSettings";
 
 function RootFolders() {
   const queryClient = useQueryClient();
@@ -676,6 +677,7 @@ export default function Settings() {
           <p className="section-hint">
             Applies once a series is finished or cancelled and every monitored chapter is on disk.
           </p>
+          <ComicInfoSettings form={form} setForm={setForm} />
         </div>
 
         <div className="settings-section">

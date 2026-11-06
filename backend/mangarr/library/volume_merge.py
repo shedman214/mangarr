@@ -36,6 +36,7 @@ def merge_chapter_archives(
     series_title: str,
     volume: int,
     summary: str = "",
+    comicinfo_fields: dict | None = None,
 ) -> int:
     """Write `dest` from the given (chapter number, .cbz path) pairs and
     return its page count. Refuses to overwrite an existing file and raises
@@ -65,6 +66,7 @@ def merge_chapter_archives(
                         pages += 1
             out.writestr("ComicInfo.xml", build_comicinfo(
                 series=series_title, volume=volume, summary=summary, page_count=pages,
+                **(comicinfo_fields or {}),
             ))
         # not the temp file's 0600 — set once written, in case the umask
         # leaves no owner write

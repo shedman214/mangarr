@@ -12,7 +12,7 @@ from .. import USER_AGENT
 from ..library.matcher import archive_page_signature, page_bytes_signature
 from ..models import Chapter, Series
 from ..sources.base import DirectSource
-from .cbz import build_comicinfo, guess_extension, write_cbz
+from .cbz import build_comicinfo, guess_extension, series_fields, write_cbz
 
 log = logging.getLogger(__name__)
 
@@ -164,6 +164,7 @@ async def download_chapter_to_cbz(
         summary=series.description if chapter.number in (0, 1) else "",
         web=web_url,
         page_count=len(pages),
+        **series_fields(series),
     )
     write_cbz(dest_path, complete_pages, comicinfo)
     log.info("Wrote %s (%d pages)", dest_path, len(pages))

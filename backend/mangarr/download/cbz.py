@@ -1,6 +1,7 @@
 """CBZ packaging with ComicInfo.xml (Anansi/ComicRack schema, as read by
 Komga and Kavita)."""
 
+import json
 import re
 import zipfile
 from ..permissions import apply_created, mkdir_created
@@ -34,6 +35,53 @@ def guess_extension(data: bytes, fallback: str = ".jpg") -> str:
     return fallback
 
 
+# ComicInfo roles that carry MangaBaka's artists; manga artists usually draw,
+# ink, tone and letter their own pages
+_ARTIST_ROLES = ("Penciller", "Inker", "Colorist", "Letterer", "CoverArtist")
+
+
+def series_fields(series) -> dict:
+    """The series-level ComicInfo fields Kavita/Komga read beyond Series and
+    Summary — for build_comicinfo(**series_fields(series)). `series` is a
+    models.Series (or anything with some of its attributes); whatever it
+    doesn't know is left out of the XML."""
+    def attr(name):
+        return getattr(series, name, None)
+
+    try:
+        extra = json.loads(attr("comicinfo_extra") or "{}")
+    except (TypeError, ValueError):
+        extra = {}
+    if not isinstance(extra, dict):
+        extra = {}
+    genres = [g.strip() for g in (attr("genres") or "").split(",") if g.strip()] or extra.get("genres") or []
+    count = None
+    status = attr("status")
+    if getattr(status, "value", status) == "finished":
+        # Kavita: Completed when the highest volume (or chapter) on disk
+        # reaches Count, Ended below it
+        count = attr("total_volumes") or attr("total_chapters")
+    anilist_id = attr("anilist_id")
+    sources = ["MangaUpdates" if attr("mangaupdates_id") else "", "MangaBaka" if extra.get("mangabaka_id") else ""]
+    return {
+        "year": attr("year"),
+        "count": count,
+        "writers": extra.get("writers") or [],
+        "artists": extra.get("artists") or [],
+        "publishers": extra.get("publishers") or [],
+        "genres": genres,
+        "tags": extra.get("tags") or [],
+        "age_rating": extra.get("age_rating") or "",
+        # Kavita reads the AniList and MangaBaka ids from these links (first
+        # chapter) to match the series exactly, Kavita+ included
+        "links": [
+            f"https://anilist.co/manga/{anilist_id}" if anilist_id else "",
+            extra.get("web") or "",
+        ],
+        "notes": "Metadata: " + ", ".join(filter(None, sources)) if any(sources) else "",
+    }
+
+
 def build_comicinfo(
     series: str,
     number: float | None = None,
@@ -42,6 +90,17 @@ def build_comicinfo(
     summary: str = "",
     web: str = "",
     page_count: int | None = None,
+    *,
+    year: int | None = None,
+    count: int | None = None,
+    writers: list[str] = (),
+    artists: list[str] = (),
+    publishers: list[str] = (),
+    genres: list[str] = (),
+    tags: list[str] = (),
+    age_rating: str = "",
+    links: list[str] = (),
+    notes: str = "",
 ) -> str:
     root = Element("ComicInfo")
     root.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
@@ -52,15 +111,33 @@ def build_comicinfo(
             return
         SubElement(root, tag).text = XML_ILLEGAL_CHARS.sub("", str(value))
 
+    # list fields are comma-separated, which Kavita and Komga split on —
+    # so a comma inside one name would split it in two
+    def names(values) -> str:
+        return ", ".join(
+            v.replace(",", " ").strip() for v in values if isinstance(v, str) and v.strip()
+        )
+
     add("Series", series)
     if number is not None:
         add("Number", int(number) if float(number).is_integer() else number)
+    add("Count", count)
     add("Volume", volume)
     add("Title", title)
     add("Summary", summary)
-    add("Web", web)
+    add("Notes", notes)
+    add("Year", year)
+    add("Writer", names(writers))
+    for role in _ARTIST_ROLES:
+        add(role, names(artists))
+    add("Publisher", names(publishers))
+    add("Genre", names(genres))
+    add("Tags", names(tags))
+    # several links are comma-separated in v2.1; the chapter's own page first
+    add("Web", ",".join(dict.fromkeys(u for u in (web, *links) if u)))
     add("PageCount", page_count)
     add("Manga", "YesAndRightToLeft")
+    add("AgeRating", age_rating)
     rough = tostring(root, encoding="unicode")
     return minidom.parseString(rough).toprettyxml(indent="  ")
 

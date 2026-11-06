@@ -17,6 +17,7 @@ import httpx
 from .. import USER_AGENT
 from ..util import RateLimiter, rl_request
 from .base import MetadataProvider, SeriesMetadata
+from .mangabaka import publisher_names
 
 API_URL = "https://api.mangaupdates.com/v1"
 
@@ -118,6 +119,7 @@ class MangaUpdatesProvider(MetadataProvider):
             genres=[g["genre"] for g in (record.get("genres") or []) if g.get("genre")],
             total_chapters=int(latest) if latest else None,
             total_volumes=parse_total_volumes(record.get("status")),
+            publishers=publisher_names(record.get("publishers") or []),
         )
 
     async def search(self, query: str, limit: int = 20) -> list[SeriesMetadata]:

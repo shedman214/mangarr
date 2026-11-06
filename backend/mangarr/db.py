@@ -75,6 +75,7 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str | None]] = [
     # existing failures keep their 7-day block (they were never classified)
     ("downloads", "transient_error", "BOOLEAN NOT NULL DEFAULT 0", None),
     ("downloads", "queue_priority", "INTEGER NOT NULL DEFAULT 0", None),
+    ("series", "comicinfo_extra", "TEXT NOT NULL DEFAULT ''", None),
 ]
 
 # Chapters mangarr downloaded before file provenance was tracked: the latest
