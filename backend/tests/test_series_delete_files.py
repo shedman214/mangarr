@@ -102,3 +102,34 @@ async def test_bulk_remove_with_files(session, tmp_path):
     assert sorted(preview.folders) == sorted([str(a), str(b)])
     out = await series_api.delete_series_bulk(SeriesDeleteIn(series_ids=[sa.id, sb.id], delete_files=True), session)
     assert out.count == 2 and not a.exists() and not b.exists()
+
+
+async def test_bulk_never_deletes_a_folder_refused_for_another_series(session, tmp_path):
+    root = RootFolder(path=str(tmp_path / "manga"))
+    shared = folder(tmp_path / "manga" / "Omnibus")
+    # Alpha reads Omnibus as a shared volume folder; Omnibus is Beta's own primary folder
+    sa = await add(session, root, "Alpha", extras=[("Omnibus", 0)])
+    sb = await add(session, root, "Omnibus")
+    out = await series_api.delete_series_bulk(SeriesDeleteIn(series_ids=[sa.id, sb.id], delete_files=True), session)
+    assert str(shared) not in out.deleted and shared.exists()
+    assert [r.path for r in out.refused].count(str(shared)) == 1 and out.problems == []
+
+
+async def test_nested_folders_are_deleted_once_through_their_parent(session, tmp_path):
+    root = RootFolder(path=str(tmp_path / "manga"))
+    parent = folder(tmp_path / "manga" / "Epsilon")
+    child = folder(tmp_path / "manga" / "Epsilon" / "Specials")
+    series = await add(session, root, "Epsilon", extras=[("Epsilon/Specials", None)])
+    preview = await series_api.delete_series_preview(series.id, session)
+    assert preview.folders == [str(parent)]
+    out = await series_api.delete_series(series.id, session, delete_files=True)
+    assert out.deleted == [str(parent)] and out.problems == [] and not child.exists()
+
+
+async def test_a_folder_reached_through_a_symlinked_parent_is_one_folder(session, tmp_path):
+    root = RootFolder(path=str(tmp_path / "manga"))
+    real = folder(tmp_path / "manga" / "Zeta")
+    (tmp_path / "manga" / "alias").symlink_to(tmp_path / "manga")
+    series = await add(session, root, "Zeta", extras=[("alias/Zeta", None)])
+    out = await series_api.delete_series(series.id, session, delete_files=True)
+    assert out.deleted == [str(real)] and out.problems == [] and not real.exists()

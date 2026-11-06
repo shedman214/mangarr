@@ -39,41 +39,79 @@ def _inside(child: Path, parent: Path) -> bool:
     return child == parent or parent in child.parents
 
 
-def plan_folder_deletion(series, others, roots: list[str]) -> FolderPlan:
-    """Which of `series`' folders may be deleted. `others` are the series
-    that stay in the library, with their root and extra folders loaded."""
+def folder_specs(series_list) -> list[tuple[str, list[tuple[Path, bool]]]]:
+    """(title, folders) for each series — plain data, so the disk checks in
+    plan_folder_deletion can run in a worker thread."""
+    return [(s.title, series_folder_paths(s)) for s in series_list]
+
+
+def plan_folder_deletion(doomed, others, roots: list[str]) -> FolderPlan:
+    """Which folders of the series being removed (`doomed`) may be deleted.
+    `doomed` and `others` (the series that stay) come from folder_specs.
+    Touches the disk; run it off the event loop.
+
+    Across the whole request: a folder refused for one series is never
+    deleted for another, nor through a parent folder; a folder inside
+    another planned folder is dropped (deleting the parent covers it)."""
     plan = FolderPlan()
     root_paths = [Path(r).resolve(strict=False) for r in roots]
     other_paths = [
-        (other.title, path.resolve(strict=False))
-        for other in others
-        for path, _shared in series_folder_paths(other)
+        (title, path.resolve(strict=False))
+        for title, folders in others
+        for path, _shared in folders
     ]
-    for path, shared in series_folder_paths(series):
-        if path.is_symlink():
-            plan.refused.append((path, "it is a symbolic link"))
+    candidates: list[tuple[Path, Path]] = []  # (path, resolved)
+    refused_real: list[Path] = []
+    seen_refused: set[str] = set()
+
+    def refuse(path: Path, reason: str) -> None:
+        refused_real.append(path.resolve(strict=False))
+        if str(path) not in seen_refused:
+            seen_refused.add(str(path))
+            plan.refused.append((path, reason))
+
+    for _title, folders in doomed:
+        for path, shared in folders:
+            if path.is_symlink():
+                refuse(path, "it is a symbolic link")
+                continue
+            if not path.exists():
+                continue  # nothing on disk to delete
+            if not path.is_dir():
+                refuse(path, "it is not a folder")
+                continue
+            real = path.resolve(strict=False)
+            if any(real == root for root in root_paths):
+                refuse(path, "it is a root folder")
+                continue
+            if not any(root in real.parents for root in root_paths):
+                refuse(path, "it is outside the root folders")
+                continue
+            if shared:
+                refuse(path, "it is a shared folder")
+                continue
+            user = next((t for t, other in other_paths
+                         if _inside(other, real) or _inside(real, other)), None)
+            if user is not None:
+                refuse(path, f"“{user}” also uses it")
+                continue
+            candidates.append((path, real))
+
+    kept: list[tuple[Path, Path]] = []
+    for path, real in candidates:
+        # a refused folder at, inside or above this one protects it
+        guard = next((r for r in refused_real if _inside(r, real) or _inside(real, r)), None)
+        if guard is not None:
+            refuse(path, "another folder in this removal is kept and overlaps it")
             continue
-        if not path.exists():
-            continue  # nothing on disk to delete
-        if not path.is_dir():
-            plan.refused.append((path, "it is not a folder"))
-            continue
-        real = path.resolve(strict=False)
-        if any(real == root for root in root_paths):
-            plan.refused.append((path, "it is a root folder"))
-            continue
-        if not any(root in real.parents for root in root_paths):
-            plan.refused.append((path, "it is outside the root folders"))
-            continue
-        if shared:
-            plan.refused.append((path, "it is a shared folder"))
-            continue
-        user = next((title for title, other in other_paths
-                     if _inside(other, real) or _inside(real, other)), None)
-        if user is not None:
-            plan.refused.append((path, f"“{user}” also uses it"))
-            continue
-        plan.delete.append(path)
+        kept.append((path, real))
+    planned: set[Path] = set()
+    for path, real in kept:
+        if any(real != other and _inside(real, other) for _p, other in kept):
+            continue  # deleted with its parent folder
+        if real not in planned:  # two spellings of one folder: delete it once
+            planned.add(real)
+            plan.delete.append(path)
     return plan
 
 

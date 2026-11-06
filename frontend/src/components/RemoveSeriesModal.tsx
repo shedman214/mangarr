@@ -26,6 +26,8 @@ export function RemoveSeriesModal({ seriesIds, title, onClose, onRemoved, childr
   onRemoved: (result: RemoveResult) => void;
 }) {
   const [deleteFiles, setDeleteFiles] = useState(false);
+  // folder deletion that failed after the series was removed: shown before closing
+  const [failed, setFailed] = useState<RemoveResult | null>(null);
   const single = seriesIds.length === 1;
   const preview = useQuery({
     queryKey: ["delete-preview", seriesIds],
@@ -33,14 +35,32 @@ export function RemoveSeriesModal({ seriesIds, title, onClose, onRemoved, childr
       ? api.get<Preview>(`/series/${seriesIds[0]}/delete-preview`)
       : api.post<Preview>("/series/editor/delete-preview", { series_ids: seriesIds }),
     enabled: deleteFiles,
+    gcTime: 0, // a re-tick always shows a fresh list, never a cached one
   });
+  // only a preview that finished fetching may be acted on
+  const ready = !deleteFiles || (preview.isSuccess && preview.fetchStatus === "idle");
   const remove = useMutation({
     mutationFn: () => single
       ? api.del<RemoveResult>(`/series/${seriesIds[0]}?delete_files=${deleteFiles}`)
       : api.post<RemoveResult>("/series/editor/delete", { series_ids: seriesIds, delete_files: deleteFiles }),
-    onSuccess: onRemoved,
+    onSuccess: (result) => (result.problems.length > 0 ? setFailed(result) : onRemoved(result)),
   });
-  const folders = preview.data?.folders ?? [];
+  const folders = ready ? (preview.data?.folders ?? []) : [];
+
+  if (failed) {
+    return (
+      <Modal title={`Removed ${title}`} onClose={() => onRemoved(failed)}>
+        <p role="alert" className="remove-files-warning">
+          Removed from Mangarr, but some folders could not be deleted:
+        </p>
+        <ul className="remove-files-preview">{failed.problems.map((p, i) => <li key={i}><code>{p}</code></li>)}</ul>
+        {failed.deleted.length > 0 && <p className="section-hint">Deleted: {failed.deleted.join(", ")}</p>}
+        <div className="modal-actions">
+          <button className="btn" onClick={() => onRemoved(failed)}>Close</button>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal title={`Remove ${title}`} onClose={onClose}>
@@ -52,8 +72,8 @@ export function RemoveSeriesModal({ seriesIds, title, onClose, onRemoved, childr
       </label>
       {!deleteFiles ? (
         <p className="section-hint">Files on disk are kept.</p>
-      ) : preview.isLoading ? (
-        <p className="section-hint">Checking folders…</p>
+      ) : !ready ? (
+        preview.isError ? null : <p className="section-hint">Checking folders…</p>
       ) : (
         <div className="remove-files-preview">
           {folders.length > 0 ? (
@@ -66,10 +86,10 @@ export function RemoveSeriesModal({ seriesIds, title, onClose, onRemoved, childr
           ) : (
             <p className="section-hint">No folder of {single ? "this series" : "these series"} can be deleted; files stay on disk.</p>
           )}
-          {(preview.data?.refused.length ?? 0) > 0 && (
+          {ready && (preview.data?.refused.length ?? 0) > 0 && (
             <>
               <p className="section-hint">Kept on disk:</p>
-              <ul>{preview.data!.refused.map((r) => <li key={r.path}><code>{r.path}</code> — {r.reason}</li>)}</ul>
+              <ul>{preview.data!.refused.map((r, i) => <li key={i}><code>{r.path}</code> — {r.reason}</li>)}</ul>
             </>
           )}
         </div>
@@ -77,7 +97,7 @@ export function RemoveSeriesModal({ seriesIds, title, onClose, onRemoved, childr
       <ErrorNotice error={preview.error ?? remove.error} />
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn danger" disabled={remove.isPending || (deleteFiles && !preview.data)}
+        <button className="btn danger" disabled={remove.isPending || !ready}
           onClick={() => remove.mutate()}>
           {remove.isPending ? "Removing…" : deleteFiles && folders.length > 0 ? "Remove and delete files" : "Remove"}
         </button>

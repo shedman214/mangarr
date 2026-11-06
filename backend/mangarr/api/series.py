@@ -345,20 +345,18 @@ _FOLDER_OPTIONS = (selectinload(Series.root_folder), selectinload(Series.extra_f
 
 async def _folder_plan(session: AsyncSession, doomed: list[Series]):
     """Which folders of the series being removed may be deleted: only their
-    own, never one another remaining series uses (library.series_delete)."""
-    from ..library.series_delete import FolderPlan, plan_folder_deletion
+    own, never one another remaining series uses (library.series_delete).
+    The disk checks run in a worker thread."""
+    from ..library.series_delete import folder_specs, plan_folder_deletion
 
     ids = {s.id for s in doomed}
     others = (await session.execute(
         select(Series).options(*_FOLDER_OPTIONS).where(Series.id.notin_(ids))
     )).scalars().all()
-    roots = (await session.execute(select(RootFolder.path))).scalars().all()
-    plan = FolderPlan()
-    for series in doomed:
-        one = plan_folder_deletion(series, others, roots)
-        plan.delete += [p for p in one.delete if p not in plan.delete]
-        plan.refused += one.refused
-    return plan
+    roots = list((await session.execute(select(RootFolder.path))).scalars().all())
+    return await asyncio.to_thread(
+        plan_folder_deletion, folder_specs(doomed), folder_specs(others), roots
+    )
 
 
 def _refused_out(plan) -> list[RefusedFolderOut]:
@@ -391,8 +389,19 @@ async def delete_series_bulk_preview(body: SeriesBulkIn, session: AsyncSession =
 async def delete_series_bulk(body: SeriesDeleteIn, session: AsyncSession = Depends(get_session)):
     """Remove many series from the library. Files on disk are kept unless
     delete_files is set; then each series' own folders are deleted."""
-    series_list = await _series_in_order(session, body.series_ids, *_FOLDER_OPTIONS)
-    return await _remove(session, series_list, body.delete_files)
+    from ..jobs.tasks import acquire_series_lock
+
+    # every series' lock, in id order (so two bulk removals can't deadlock),
+    # held through removal: an import holding one can't recreate a folder
+    locks = []
+    try:
+        for series_id in sorted(set(body.series_ids)):
+            locks.append(await acquire_series_lock(series_id))
+        series_list = await _series_in_order(session, body.series_ids, *_FOLDER_OPTIONS)
+        return await _remove(session, series_list, body.delete_files)
+    finally:
+        for lock in locks:
+            lock.release()
 
 
 @router.get("/{series_id}", response_model=SeriesDetailOut)

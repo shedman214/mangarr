@@ -39,3 +39,41 @@ test("bulk removal sends delete_files with every selected series", async () => {
   await userEvent.click(await screen.findByRole("button", { name: "Remove and delete files" }));
   await waitFor(() => expect(calls.at(-1)?.body).toEqual({ series_ids: [1, 2], delete_files: true }));
 });
+
+test("re-ticking waits for a fresh preview, and a failed one blocks removal", async () => {
+  let fail = false;
+  fakeApi((_, path) => path === "/series/7/delete-preview"
+    ? (fail ? { status: 500, body: { detail: "disk unavailable" } } : { body: PREVIEW }) : undefined);
+  renderWithClient(<RemoveSeriesModal seriesIds={[7]} title="Alpha" onClose={() => {}} onRemoved={() => {}} />);
+  const box = screen.getByRole("checkbox", { name: "Delete files and folders on disk" });
+  await userEvent.click(box);
+  expect(await screen.findByText("/manga/Alpha")).toBeInTheDocument();
+  await userEvent.click(box);
+  fail = true;
+  await userEvent.click(box);
+  expect(await screen.findByText(/disk unavailable/)).toBeInTheDocument();
+  expect(screen.queryByText("/manga/Alpha")).toBeNull(); // the earlier list is not reused
+  expect(screen.getByRole("button", { name: "Remove" })).toBeDisabled();
+});
+
+test("folders that could not be deleted are shown before closing", async () => {
+  const removed = vi.fn();
+  fakeApi((method, path) => path === "/series/7/delete-preview" ? { body: PREVIEW }
+    : method === "DELETE" ? { body: { count: 1, deleted: [], refused: [], problems: ["/manga/Alpha: Permission denied"] } } : undefined);
+  renderWithClient(<RemoveSeriesModal seriesIds={[7]} title="Alpha" onClose={() => {}} onRemoved={removed} />);
+  await userEvent.click(screen.getByRole("checkbox", { name: "Delete files and folders on disk" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Remove and delete files" }));
+  expect(await screen.findByText("/manga/Alpha: Permission denied")).toBeInTheDocument();
+  expect(removed).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("button", { name: "Close" }));
+  expect(removed).toHaveBeenCalledTimes(1);
+});
+
+test("a shared folder listed twice in a bulk preview renders once per entry without key clashes", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  fakeApi(() => ({ body: { folders: [], refused: [{ path: "/s", reason: "it is a shared folder" }, { path: "/s", reason: "it is a shared folder" }] } }));
+  renderWithClient(<RemoveSeriesModal seriesIds={[1, 2]} title="2 series" onClose={() => {}} onRemoved={() => {}} />);
+  await userEvent.click(screen.getByRole("checkbox", { name: "Delete files and folders on disk" }));
+  expect(await screen.findAllByText("/s")).toHaveLength(2);
+  expect(errors.mock.calls.some((c) => String(c[0]).includes("same key"))).toBe(false);
+});
