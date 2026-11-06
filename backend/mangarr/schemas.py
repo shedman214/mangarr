@@ -219,6 +219,30 @@ class SeriesBulkOut(BaseModel):
     count: int
 
 
+class SeriesDeleteIn(SeriesBulkIn):
+    # also delete each series' own folders on disk (see library.series_delete)
+    delete_files: bool = False
+
+
+class RefusedFolderOut(BaseModel):
+    path: str
+    reason: str
+
+
+class SeriesDeletePreviewOut(BaseModel):
+    """The folders a Remove with "Delete files and folders on disk" would
+    delete, and those it would leave, with why."""
+    folders: list[str]
+    refused: list[RefusedFolderOut]
+
+
+class SeriesDeleteOut(BaseModel):
+    count: int
+    deleted: list[str] = []
+    refused: list[RefusedFolderOut] = []
+    problems: list[str] = []
+
+
 class SeriesGroupOut(BaseModel):
     """A scanlation group a linked source offers for the series."""
     source_name: str

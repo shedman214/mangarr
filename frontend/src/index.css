@@ -702,6 +702,26 @@ table.data-table {
   overscroll-behavior: contain;
 }
 
+.remove-files-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 4px;
+  font-weight: 500;
+}
+
+.remove-files-warning {
+  color: var(--danger);
+  font-weight: 500;
+  margin: 8px 0 4px;
+}
+
+.remove-files-preview ul {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+  word-break: break-all;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

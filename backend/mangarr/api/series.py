@@ -37,11 +37,15 @@ from ..schemas import (
     ChapterMetadataIn,
     ChapterMonitorIn,
     ChapterOut,
+    RefusedFolderOut,
     RelatedOut,
     RelatedTitleOut,
     SeriesBulkIn,
     SeriesBulkOut,
     SeriesBulkRefreshIn,
+    SeriesDeleteIn,
+    SeriesDeleteOut,
+    SeriesDeletePreviewOut,
     SeriesDetailOut,
     SeriesEditorIn,
     SeriesEditorOut,
@@ -336,15 +340,59 @@ async def _cancel_direct_downloads(session: AsyncSession, series_ids: list[int])
     )
 
 
-@router.post("/editor/delete", response_model=SeriesBulkOut)
-async def delete_series_bulk(body: SeriesBulkIn, session: AsyncSession = Depends(get_session)):
-    """Remove many series from the library. Files on disk are kept."""
-    series_list = await _series_in_order(session, body.series_ids)
+_FOLDER_OPTIONS = (selectinload(Series.root_folder), selectinload(Series.extra_folders))
+
+
+async def _folder_plan(session: AsyncSession, doomed: list[Series]):
+    """Which folders of the series being removed may be deleted: only their
+    own, never one another remaining series uses (library.series_delete)."""
+    from ..library.series_delete import FolderPlan, plan_folder_deletion
+
+    ids = {s.id for s in doomed}
+    others = (await session.execute(
+        select(Series).options(*_FOLDER_OPTIONS).where(Series.id.notin_(ids))
+    )).scalars().all()
+    roots = (await session.execute(select(RootFolder.path))).scalars().all()
+    plan = FolderPlan()
+    for series in doomed:
+        one = plan_folder_deletion(series, others, roots)
+        plan.delete += [p for p in one.delete if p not in plan.delete]
+        plan.refused += one.refused
+    return plan
+
+
+def _refused_out(plan) -> list[RefusedFolderOut]:
+    return [RefusedFolderOut(path=str(p), reason=r) for p, r in plan.refused]
+
+
+async def _remove(session: AsyncSession, series_list: list[Series], delete_files: bool) -> SeriesDeleteOut:
+    out = SeriesDeleteOut(count=len(series_list))
+    plan = await _folder_plan(session, series_list) if delete_files else None
     await _cancel_direct_downloads(session, [series.id for series in series_list])
     for series in series_list:
         await session.delete(series)
     await session.commit()
-    return SeriesBulkOut(count=len(series_list))
+    if plan is not None:
+        from ..library.series_delete import delete_folders
+
+        # after the rows are gone, so nothing re-imports into a half-deleted folder
+        out.deleted, out.problems = await asyncio.to_thread(delete_folders, plan.delete)
+        out.refused = _refused_out(plan)
+    return out
+
+
+@router.post("/editor/delete-preview", response_model=SeriesDeletePreviewOut)
+async def delete_series_bulk_preview(body: SeriesBulkIn, session: AsyncSession = Depends(get_session)):
+    plan = await _folder_plan(session, await _series_in_order(session, body.series_ids, *_FOLDER_OPTIONS))
+    return SeriesDeletePreviewOut(folders=[str(p) for p in plan.delete], refused=_refused_out(plan))
+
+
+@router.post("/editor/delete", response_model=SeriesDeleteOut)
+async def delete_series_bulk(body: SeriesDeleteIn, session: AsyncSession = Depends(get_session)):
+    """Remove many series from the library. Files on disk are kept unless
+    delete_files is set; then each series' own folders are deleted."""
+    series_list = await _series_in_order(session, body.series_ids, *_FOLDER_OPTIONS)
+    return await _remove(session, series_list, body.delete_files)
 
 
 @router.get("/{series_id}", response_model=SeriesDetailOut)
@@ -414,14 +462,31 @@ async def update_series(
     return await get_series(series_id, session)
 
 
-@router.delete("/{series_id}", status_code=204)
-async def delete_series(series_id: int, session: AsyncSession = Depends(get_session)):
-    series = await session.get(Series, series_id)
-    if series is None:
+@router.get("/{series_id}/delete-preview", response_model=SeriesDeletePreviewOut)
+async def delete_series_preview(series_id: int, session: AsyncSession = Depends(get_session)):
+    series_list = await _series_in_order(session, [series_id], *_FOLDER_OPTIONS)
+    if not series_list:
         raise HTTPException(404, "Series not found")
-    await _cancel_direct_downloads(session, [series.id])
-    await session.delete(series)
-    await session.commit()
+    plan = await _folder_plan(session, series_list)
+    return SeriesDeletePreviewOut(folders=[str(p) for p in plan.delete], refused=_refused_out(plan))
+
+
+@router.delete("/{series_id}", response_model=SeriesDeleteOut)
+async def delete_series(
+    series_id: int, session: AsyncSession = Depends(get_session), delete_files: bool = False,
+):
+    """Remove the series. Files on disk are kept unless delete_files is set;
+    then its own folders are deleted (never a root or a shared folder)."""
+    from ..jobs.tasks import acquire_series_lock
+
+    lock = await acquire_series_lock(series_id)
+    try:
+        series_list = await _series_in_order(session, [series_id], *_FOLDER_OPTIONS)
+        if not series_list:
+            raise HTTPException(404, "Series not found")
+        return await _remove(session, series_list, delete_files)
+    finally:
+        lock.release()
 
 
 @router.post("/{series_id}/refresh", status_code=202)
