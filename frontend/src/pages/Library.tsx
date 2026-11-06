@@ -16,6 +16,27 @@ interface Filters {
 const NO_FILTERS: Filters = { monitored: "all", status: "all", content: "all" };
 const FILTERS_KEY = "library-filters";
 
+/** "title" keeps the server's order (sort title, then title). */
+type Sort = "title" | "added-desc" | "added-asc";
+const SORT_KEY = "library-sort";
+const SORTS: Sort[] = ["title", "added-desc", "added-asc"];
+
+function loadSort(): Sort {
+  try {
+    const saved = localStorage.getItem(SORT_KEY) as Sort | null;
+    return saved && SORTS.includes(saved) ? saved : "title";
+  } catch {
+    return "title";
+  }
+}
+
+function sortSeries(list: Series[], sort: Sort): Series[] {
+  if (sort === "title") return list;
+  const sign = sort === "added-desc" ? -1 : 1;
+  // stable sort: series added at the same moment keep their title order
+  return [...list].sort((a, b) => sign * (Date.parse(a.added_at) - Date.parse(b.added_at)));
+}
+
 function loadFilters(): Filters {
   try {
     return { ...NO_FILTERS, ...JSON.parse(localStorage.getItem(FILTERS_KEY) ?? "{}") };
@@ -106,6 +127,7 @@ function PosterCard({
 export default function Library() {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Filters>(loadFilters);
+  const [sort, setSort] = useState<Sort>(loadSort);
   // library editor: null when not selecting
   const [selected, setSelected] = useState<Set<number> | null>(null);
   const [lastPicked, setLastPicked] = useState<number | null>(null);
@@ -120,10 +142,23 @@ export default function Library() {
     localStorage.setItem(FILTERS_KEY, JSON.stringify(next));
   };
 
+  const changeSort = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value as Sort;
+    setSort(next);
+    try {
+      localStorage.setItem(SORT_KEY, next);
+    } catch {
+      // the choice still applies for this visit
+    }
+  };
+
   const q = query.trim().toLowerCase();
-  const filtered = data
-    ?.filter((s) => matchesFilters(s, filters))
-    .filter((s) => !q || matchesQuery(s, q));
+  const filtered =
+    data &&
+    sortSeries(
+      data.filter((s) => matchesFilters(s, filters)).filter((s) => !q || matchesQuery(s, q)),
+      sort,
+    );
   const filtering = q || filters.monitored !== "all" || filters.status !== "all" || filters.content !== "all";
   // actions only ever touch what's on screen: a series hidden by a filter
   // after being picked is not silently edited or removed
@@ -157,46 +192,55 @@ export default function Library() {
   return (
     <>
       <Toolbar title="Library" className="library-toolbar">
-        <select value={filters.monitored} onChange={setFilter("monitored")}>
-          <option value="all">All</option>
-          <option value="monitored">Monitored</option>
-          <option value="unmonitored">Unmonitored</option>
-        </select>
-        <select value={filters.status} onChange={setFilter("status")}>
-          <option value="all">Any status</option>
-          <option value="ongoing">Ongoing</option>
-          <option value="finished">Finished</option>
-        </select>
-        <select value={filters.content} onChange={setFilter("content")}>
-          <option value="all">Any content</option>
-          <option value="missing">Missing chapters</option>
-          <option value="complete">All downloaded</option>
-        </select>
-        <input
-          type="search"
-          className="toolbar-search"
-          placeholder="Search library…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {filtering && data && filtered && (
-          <span style={{ fontSize: 12, color: "#999" }}>
-            {filtered.length} of {data.length}
-          </span>
-        )}
-        {data && data.length > 0 && (
-          <button
-            className={`btn${selected ? " active" : ""}`}
-            aria-pressed={selected !== null}
-            title="Select series to edit, refresh, search or remove several at once"
-            onClick={() => (selected ? stopSelecting() : setSelected(new Set()))}
-          >
-            ☑ Select
-          </button>
-        )}
-        <Link to="/add" className="btn primary">
-          + Add Series
-        </Link>
+        <div className="library-filters">
+          <select value={filters.monitored} onChange={setFilter("monitored")}>
+            <option value="all">All</option>
+            <option value="monitored">Monitored</option>
+            <option value="unmonitored">Unmonitored</option>
+          </select>
+          <select value={filters.status} onChange={setFilter("status")}>
+            <option value="all">Any status</option>
+            <option value="ongoing">Ongoing</option>
+            <option value="finished">Finished</option>
+          </select>
+          <select value={filters.content} onChange={setFilter("content")}>
+            <option value="all">Any content</option>
+            <option value="missing">Missing chapters</option>
+            <option value="complete">All downloaded</option>
+          </select>
+          <select value={sort} onChange={changeSort} aria-label="Sort library">
+            <option value="title">Sort: Title</option>
+            <option value="added-desc">Added: newest first</option>
+            <option value="added-asc">Added: oldest first</option>
+          </select>
+        </div>
+        <div className="library-actions">
+          <input
+            type="search"
+            className="toolbar-search"
+            placeholder="Search library…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {filtering && data && filtered && (
+            <span style={{ fontSize: 12, color: "#999" }}>
+              {filtered.length} of {data.length}
+            </span>
+          )}
+          {data && data.length > 0 && (
+            <button
+              className={`btn${selected ? " active" : ""}`}
+              aria-pressed={selected !== null}
+              title="Select series to edit, refresh, search or remove several at once"
+              onClick={() => (selected ? stopSelecting() : setSelected(new Set()))}
+            >
+              ☑ Select
+            </button>
+          )}
+          <Link to="/add" className="btn primary">
+            + Add Series
+          </Link>
+        </div>
       </Toolbar>
       <div className="content">
         <ErrorNotice error={error} retry={() => void refetch()} />
