@@ -36,7 +36,8 @@ export async function signIn(username: string, password: string): Promise<void> 
 }
 
 export async function signOut(): Promise<void> {
-  await fetch("/auth/logout", { method: "POST" });
+  const resp = await fetch("/auth/logout", { method: "POST" });
+  if (!resp.ok) throw new Error("Could not log out. Please try again.");
 }
 
 export function appVersion(): string {

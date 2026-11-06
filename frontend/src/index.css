@@ -153,6 +153,30 @@ input[type="checkbox"] {
   text-align: center;
 }
 
+.sidebar-logout {
+  width: 100%;
+  background: transparent;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sidebar-logout:disabled { opacity: 0.6; cursor: wait; }
+.sidebar-logout-error {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  max-width: calc(100vw - 32px);
+  padding: 12px;
+  background: var(--bg-raised);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  z-index: 100;
+}
+
 .nav-badge {
   margin-left: auto;
   background: var(--accent);
@@ -1548,6 +1572,7 @@ h4.link-text:hover {
     font-size: 19px;
     line-height: 22px;
   }
+  .sidebar-logout { width: auto; text-align: center; }
 
   .nav-item:hover {
     background: none;

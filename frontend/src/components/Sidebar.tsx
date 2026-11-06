@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, appVersion } from "../api/client";
 import type { QueueItem } from "../api/types";
 import { paletteShortcut } from "./CommandPalette";
+import { SidebarLogout } from "./SidebarLogout";
 
 const items = [
   { to: "/", label: "Library", icon: "▦" },
@@ -14,6 +15,10 @@ const items = [
 ];
 
 export default function Sidebar({ onSearch }: { onSearch: () => void }) {
+  const { data: login } = useQuery({
+    queryKey: ["login-settings"],
+    queryFn: () => api.get<{ enabled: boolean }>("/settings/login"),
+  });
   const { data: queue } = useQuery({
     queryKey: ["queue"],
     queryFn: () => api.get<QueueItem[]>("/queue"),
@@ -46,6 +51,7 @@ export default function Sidebar({ onSearch }: { onSearch: () => void }) {
             )}
           </NavLink>
         ))}
+        {login?.enabled && <SidebarLogout />}
       </nav>
       <div className="sidebar-footer">v{appVersion()}</div>
     </div>

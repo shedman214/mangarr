@@ -13,6 +13,10 @@ export function LoginSettings() {
   const [repeat, setRepeat] = useState("");
   const [current, setCurrent] = useState("");
   const [saved, setSaved] = useState("");
+  const logout = useMutation({
+    mutationFn: signOut,
+    onSuccess: () => { setApiKey(""); client.clear(); window.location.reload(); },
+  });
   const enabled = Boolean(state.data?.enabled);
   const save = useMutation({
     mutationFn: (enable: boolean) => api.put<LoginState>("/settings/login", {
@@ -47,9 +51,9 @@ export function LoginSettings() {
     <div className="form-row">
       <button className="btn primary" disabled={!canEnable || save.isPending} onClick={() => save.mutate(true)}>{enabled ? "Save login changes" : "Turn on login"}</button>
       {enabled && <button className="btn danger" disabled={!current || save.isPending} onClick={() => save.mutate(false)}>Turn off login</button>}
-      {enabled && <button className="btn" onClick={() => void signOut().then(() => window.location.reload())}>Sign out</button>}
+      {enabled && <button className="btn" disabled={logout.isPending} onClick={() => logout.mutate()}>{logout.isPending ? "Signing out…" : "Sign out"}</button>}
     </div>
     {saved && <p role="status">{saved}</p>}
-    <ErrorNotice error={save.error || state.error} />
+    <ErrorNotice error={save.error || state.error || logout.error} />
   </section>;
 }
