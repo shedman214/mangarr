@@ -398,6 +398,14 @@ class SystemStatus(BaseModel):
 
 # ---- library import / scan / rename ----
 
+class VolumeCoversOut(BaseModel):
+    added: list[int]
+    removed: int
+    unchanged: int
+    missing: list[int]
+    failed: list[str]
+
+
 class ScanResultOut(BaseModel):
     folder: str
     folder_exists: bool

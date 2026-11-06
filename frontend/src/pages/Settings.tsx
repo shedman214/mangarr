@@ -19,6 +19,7 @@ import { LogSettings } from "../components/LogSettings";
 import { UpgradeSettings } from "../components/UpgradeSettings";
 import { AdultContentSettings } from "../components/AdultContentSettings";
 import { ComicInfoSettings } from "../components/ComicInfoSettings";
+import { VolumeCoverSettings } from "../components/VolumeCoverSettings";
 
 function RootFolders() {
   const queryClient = useQueryClient();
@@ -678,6 +679,8 @@ export default function Settings() {
             Applies once a series is finished or cancelled and every monitored chapter is on disk.
           </p>
           <ComicInfoSettings form={form} setForm={setForm} />
+          <VolumeCoverSettings form={form} setForm={setForm} dirty={dirty}
+            savedOn={saved?.english_volume_covers === "true"} />
         </div>
 
         <div className="settings-section">

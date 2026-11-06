@@ -8,6 +8,7 @@ import type {
   Release,
   ScanResult,
   SeriesDetail as SeriesDetailType,
+  VolumeCoversResult,
   VolumeMappingRow,
   VolumeResyncPreview,
   VolumeResyncResult,
@@ -627,6 +628,7 @@ export default function SeriesDetail() {
   const [showCleanup, setShowCleanup] = useState(false);
   const [showAutomation, setShowAutomation] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [coversResult, setCoversResult] = useState<VolumeCoversResult | null>(null);
   const [volumeResult, setVolumeResult] = useState<VolumeResyncResult | null>(null);
   const [resyncPreview, setResyncPreview] = useState<VolumeResyncPreview | null>(null);
   const [resyncSource, setResyncSource] = useState("");
@@ -683,6 +685,17 @@ export default function SeriesDetail() {
         showWorkNotice("Refresh complete — no linked source provides volume data.");
       }
     },
+  });
+
+  // Settings → English volume covers (off by default): the button only shows when on
+  const { data: savedSettings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => api.get<Record<string, string>>("/settings"),
+  });
+  const covers = useMutation({
+    mutationFn: () => api.post<VolumeCoversResult>(`/series/${seriesId}/volume-covers`),
+    onMutate: () => setCoversResult(null),
+    onSuccess: (res) => setCoversResult(res),
   });
 
   const scan = useMutation({
@@ -841,12 +854,13 @@ export default function SeriesDetail() {
   const actionErrors = [
     refresh.error,
     scan.error,
+    covers.error,
     toggleMonitor.error,
     toggleChapter.error,
     deleteSeries.error,
   ];
   const hasTopBanners =
-    Boolean(busyNotice || scanResult || volumeResult || actionErrors.some(Boolean)) ||
+    Boolean(busyNotice || scanResult || coversResult || volumeResult || actionErrors.some(Boolean)) ||
     activeDownloads.length > 0;
 
   const chapterRows = (chapters: Chapter[]) => (
@@ -1006,6 +1020,16 @@ export default function SeriesDetail() {
         >
           {scan.isPending ? "Scanning…" : "🗂 Scan Disk"}
         </button>
+        {savedSettings?.english_volume_covers === "true" && (
+          <button
+            className="btn"
+            title="Put each volume's English cover from MangaBaka into its first chapter file, for Kavita"
+            onClick={() => covers.mutate()}
+            disabled={covers.isPending}
+          >
+            {covers.isPending ? "Adding covers…" : "🖼 Volume covers"}
+          </button>
+        )}
         <button
           className="btn"
           title="Browse detected files and manually map unmatched files"
@@ -1124,6 +1148,18 @@ export default function SeriesDetail() {
                 provide volume→chapter assignments; existing values were left as-is.
               </>
             )}
+          </div>
+        )}
+        {coversResult && (
+          <div className="scan-banner" role="status" onClick={() => setCoversResult(null)}>
+            <strong>Volume covers.</strong>{" "}
+            {coversResult.added.length > 0
+              ? `English cover added to volume${coversResult.added.length === 1 ? "" : "s"} ${coversResult.added.join(", ")}`
+              : "No cover needed changing"}
+            {coversResult.unchanged > 0 && `, ${coversResult.unchanged} already had it`}
+            {coversResult.missing.length > 0 &&
+              `, no English cover listed for volume${coversResult.missing.length === 1 ? "" : "s"} ${coversResult.missing.join(", ")}`}
+            {coversResult.failed.length > 0 && ` — ${coversResult.failed.join("; ")}`}
           </div>
         )}
         {scanResult && (

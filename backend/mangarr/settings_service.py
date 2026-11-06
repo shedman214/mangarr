@@ -48,6 +48,10 @@ DEFAULTS: dict[str, str] = {
     # from MangaBaka (looked up by the series' AniList/MangaUpdates id) so
     # Kavita and Komga show them. Publishers prefer MangaUpdates either way.
     "mangabaka_metadata": "true",
+    # Put MangaBaka's English front cover into each volume's first chapter
+    # file, where Kavita takes the volume cover from. Rewrites library files,
+    # so off by default; the user opts in.
+    "english_volume_covers": "false",
     # MangaDex credentials (personal API client)
     "mangadex_client_id": "",
     "mangadex_client_secret": "",
@@ -151,6 +155,8 @@ def validate(values: dict[str, str]) -> None:
         raise ValueError("adult_content must be true or false")
     if values.get("mangabaka_metadata", "true") not in ("true", "false"):
         raise ValueError("mangabaka_metadata must be true or false")
+    if values.get("english_volume_covers", "false") not in ("true", "false"):
+        raise ValueError("english_volume_covers must be true or false")
     if values.get("upgrades_allowed", "false") not in ("true", "false"):
         raise ValueError("upgrades_allowed must be true or false")
     if values.get("upgrade_until", "") not in ("", *DISCOVERY_SOURCE_NAMES):
