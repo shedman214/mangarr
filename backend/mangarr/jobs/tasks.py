@@ -258,11 +258,13 @@ async def refresh_comicinfo_extra(session: AsyncSession, series: Series, mu_meta
         try:
             extras = await mangabaka.lookup(series.anilist_id, series.mangaupdates_id)
             if extras is None:
+                # found before, missing now: keep the stored data (publishers
+                # still update from MangaUpdates below)
                 try:
-                    known = json.loads(series.comicinfo_extra or "{}").get("mangabaka_id")
+                    stored = json.loads(series.comicinfo_extra or "{}")
+                    extras = ComicExtras.from_dict(stored) if stored.get("mangabaka_id") else ComicExtras()
                 except (TypeError, ValueError, AttributeError):
-                    known = None
-                extras = None if known else ComicExtras()
+                    extras = ComicExtras()
         except Exception as exc:
             log.warning("MangaBaka lookup failed for %r: %s", series.title, exc)
             extras = None

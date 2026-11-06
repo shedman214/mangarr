@@ -114,7 +114,9 @@ def build_comicinfo(
     # list fields are comma-separated, which Kavita and Komga split on —
     # so a comma inside one name would split it in two
     def names(values) -> str:
-        return ", ".join(v.replace(",", " ").strip() for v in values if v and v.strip())
+        return ", ".join(
+            v.replace(",", " ").strip() for v in values if isinstance(v, str) and v.strip()
+        )
 
     add("Series", series)
     if number is not None:
