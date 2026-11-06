@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import type { MonitorMode, RootFolder, Series, SeriesEditorResult } from "../api/types";
 import { MONITOR_MODES } from "./SeriesAutomation";
 import { ErrorNotice, Modal } from "./common";
+import { RemoveSeriesModal } from "./RemoveSeriesModal";
 
 function seriesCount(n: number): string {
   return `${n} series`;
@@ -152,25 +153,18 @@ function DeleteSeriesModal({
   onDeleted: () => void;
 }) {
   const queryClient = useQueryClient();
-  const remove = useMutation({
-    mutationFn: () => api.post("/series/editor/delete", { series_ids: series.map((s) => s.id) }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["series"] });
-      onDeleted();
-    },
-  });
   return (
-    <Modal title={`Remove ${seriesCount(series.length)}`} onClose={onClose}>
-      <p>Remove these from Mangarr? Files on disk are kept.</p>
+    <RemoveSeriesModal
+      seriesIds={series.map((s) => s.id)}
+      title={seriesCount(series.length)}
+      onClose={onClose}
+      onRemoved={() => {
+        void queryClient.invalidateQueries({ queryKey: ["series"] });
+        onDeleted();
+      }}
+    >
       <TitleList series={series} />
-      <ErrorNotice error={remove.error} />
-      <div className="modal-actions">
-        <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn danger" disabled={remove.isPending} onClick={() => remove.mutate()}>
-          {remove.isPending ? "Removing…" : `Remove ${seriesCount(series.length)}`}
-        </button>
-      </div>
-    </Modal>
+    </RemoveSeriesModal>
   );
 }
 

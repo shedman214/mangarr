@@ -18,7 +18,7 @@ from mangarr.models import (
     RootFolder,
     Series,
 )
-from mangarr.schemas import SeriesBulkIn
+from mangarr.schemas import SeriesDeleteIn
 from mangarr.sources.base import DirectSource, SourceChapter
 
 
@@ -110,7 +110,7 @@ async def test_deleting_a_series_cancels_its_direct_downloads(db_session, tmp_pa
 async def test_bulk_delete_cancels_direct_downloads_too(db_session, tmp_path):
     doomed, ids = await _seed(db_session, tmp_path)
 
-    await series_api.delete_series_bulk(SeriesBulkIn(series_ids=[doomed.id]), db_session)
+    await series_api.delete_series_bulk(SeriesDeleteIn(series_ids=[doomed.id]), db_session)
 
     _assert_only_direct_work_cancelled(await _states(db_session), ids)
 

@@ -35,6 +35,7 @@ import { RelatedTitles } from "../components/RelatedTitles";
 import { sanitizeDescription } from "../sanitize";
 import { sourceLabel } from "../sources";
 import { SeriesRootFolder } from "../components/SeriesRootFolder";
+import { RemoveSeriesModal } from "../components/RemoveSeriesModal";
 
 export function InteractiveSearch({
   seriesId,
@@ -626,6 +627,7 @@ export default function SeriesDetail() {
   const [showFiles, setShowFiles] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [showCleanup, setShowCleanup] = useState(false);
+  const [showRemove, setShowRemove] = useState(false);
   const [showAutomation, setShowAutomation] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [coversResult, setCoversResult] = useState<VolumeCoversResult | null>(null);
@@ -716,14 +718,6 @@ export default function SeriesDetail() {
       setVolumeResult(res);
       setResyncPreview(null);
       invalidate();
-    },
-  });
-
-  const deleteSeries = useMutation({
-    mutationFn: () => api.del(`/series/${seriesId}`),
-    onSuccess: () => {
-      invalidate();
-      navigate("/");
     },
   });
 
@@ -845,7 +839,6 @@ export default function SeriesDetail() {
     scan.isPending ? "Scanning disk and matching files…" :
     applyResync.isPending ? "Applying volume resync…" :
     refresh.isPending ? "Refreshing metadata, source links, and chapters…" :
-    deleteSeries.isPending ? "Removing series…" :
     toggleMonitor.isPending ? "Updating monitoring…" :
     series?.refreshing
       ? "Setting up — fetching metadata, linking sources, and syncing chapters…" :
@@ -857,7 +850,6 @@ export default function SeriesDetail() {
     covers.error,
     toggleMonitor.error,
     toggleChapter.error,
-    deleteSeries.error,
   ];
   const hasTopBanners =
     Boolean(busyNotice || scanResult || coversResult || volumeResult || actionErrors.some(Boolean)) ||
@@ -1095,12 +1087,8 @@ export default function SeriesDetail() {
         </button>
         <button
           className="btn danger"
-          title="Remove this series from Mangarr without deleting files"
-          disabled={deleteSeries.isPending}
-          onClick={() => {
-            if (confirm(`Remove "${series.title}" from library? Files on disk are kept.`))
-              deleteSeries.mutate();
-          }}
+          title="Remove this series from Mangarr, optionally deleting its folders on disk"
+          onClick={() => setShowRemove(true)}
         >
           ✕
         </button>
@@ -1411,6 +1399,17 @@ export default function SeriesDetail() {
           onClose={() => {
             applyResync.reset();
             setResyncPreview(null);
+          }}
+        />
+      )}
+      {showRemove && (
+        <RemoveSeriesModal
+          seriesIds={[seriesId]}
+          title={series.title}
+          onClose={() => setShowRemove(false)}
+          onRemoved={() => {
+            invalidate();
+            navigate("/");
           }}
         />
       )}

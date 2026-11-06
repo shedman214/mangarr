@@ -20,7 +20,7 @@ from mangarr.models import (
     Series,
     SeriesFolder,
 )
-from mangarr.schemas import SeriesBulkIn, SeriesBulkRefreshIn, SeriesEditorIn
+from mangarr.schemas import SeriesBulkIn, SeriesBulkRefreshIn, SeriesDeleteIn, SeriesEditorIn
 
 
 @pytest.fixture
@@ -203,7 +203,7 @@ async def test_bulk_delete_keeps_files(session, roots):
     b = await _add(session, "Beta", root)
     (old / "Alpha").mkdir()
 
-    out = await series_api.delete_series_bulk(SeriesBulkIn(series_ids=[a.id]), session)
+    out = await series_api.delete_series_bulk(SeriesDeleteIn(series_ids=[a.id]), session)
 
     assert out.count == 1
     assert await session.scalar(select(func.count(Series.id))) == 1
