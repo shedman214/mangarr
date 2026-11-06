@@ -247,6 +247,16 @@ input[type="checkbox"] {
   width: 260px;
 }
 
+.series-link {
+  color: var(--info);
+  text-decoration: none;
+}
+
+.series-link:hover,
+.series-link:focus-visible {
+  text-decoration: underline;
+}
+
 /* filters + sort as one group, search and buttons as another: the search shrinks
    first, then the whole group wraps to a second row instead of pushing
    Add Series out of view */

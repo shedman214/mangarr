@@ -1,8 +1,14 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { HistoryItem, QueueItem } from "../api/types";
 import { EmptyState, ErrorNotice, SelectionCheckbox, Spinner, statusPill, Toolbar } from "../components/common";
+
+/** A queue or history title opens its series page, like Sonarr's series links. */
+function SeriesLink({ seriesId, title }: { seriesId: number | null; title: string }) {
+  return seriesId ? <Link to={`/series/${seriesId}`} className="series-link">{title}</Link> : <>{title}</>;
+}
 
 /** Removal stops downloads, and qBittorrent also deletes a torrent's downloaded data. */
 function confirmRemove(items: QueueItem[]): boolean {
@@ -273,7 +279,7 @@ function Queue() {
                 />
               </td>
               <td className="cell-qtitle">
-                {item.title || item.series_title}
+                <SeriesLink seriesId={item.series_id} title={item.title || item.series_title} />
                 <div className="queue-destination">Root folder: {item.root_folder_path || "Not assigned"}</div>
                 {item.status === "failed" && item.error && (
                   <div style={{ color: "var(--danger)", fontSize: "0.85em", marginTop: 2 }}>
@@ -361,7 +367,7 @@ function History() {
             <td className="cell-event">
               <span className={`pill ${statusPill[ev.event] ?? "gray"}`}>{ev.event}</span>
             </td>
-            <td className="cell-series">{ev.series_title}</td>
+            <td className="cell-series"><SeriesLink seriesId={ev.series_id} title={ev.series_title} /></td>
             <td className="cell-detail" style={{ color: "var(--text-dim)", wordBreak: "break-all" }}>{ev.detail}</td>
             <td className="cell-source">{ev.source_name}</td>
             <td className="cell-date" style={{ color: "var(--text-dim)" }}>
