@@ -28,6 +28,18 @@ test("Activity filters by source, combined with the title search", async () => {
   expect(screen.getByRole("button", { name: "Select all matches" })).toBeEnabled();
 });
 
+test("the title search also matches a source's display name", async () => {
+  fakeApi((_, path) => (path.startsWith("/queue") ? { body: [
+    queued(1, "weebcentral", "Alpha - Chapter 1"), queued(2, "mangadex", "Beta - Chapter 2"),
+  ] } : { body: [] }));
+  renderWithClient(<Activity />);
+  const search = await screen.findByRole("searchbox", { name: "Find downloads" });
+  const label = (await import("../src/sources")).sourceLabel("weebcentral");
+  await userEvent.type(search, label);
+  expect(screen.getByText("Alpha - Chapter 1")).toBeInTheDocument();
+  expect(screen.queryByText("Beta - Chapter 2")).toBeNull();
+});
+
 const today = new Date().toISOString();
 const release = (id: number, title: string) => ({
   series_id: id, series_title: title, cover_url: "", chapter_id: id, number: id, volume: null, title: "",

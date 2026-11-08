@@ -154,7 +154,7 @@ function Queue() {
   const hasFilter = Boolean(filter.trim() || rootFilter || sourceFilter);
   const matches = data.filter(item => (!rootFilter || rootKey(item) === rootFilter)
     && (!sourceFilter || item.source_name === sourceFilter)
-    && `${item.title} ${item.series_title} ${item.source_name}`.toLowerCase().includes(filter.trim().toLowerCase()));
+    && `${item.title} ${item.series_title} ${item.source_name} ${sourceLabel(item.source_name)}`.toLowerCase().includes(filter.trim().toLowerCase()));
   // Bulk actions must never include downloads hidden by the current filters.
   const selectedVisible = matches.filter((item) => selected.has(item.id)).map((item) => item.id);
   const failedItems = matches.filter(item => item.status === "failed");
