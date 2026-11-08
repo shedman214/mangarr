@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { HistoryItem, QueueItem } from "../api/types";
+import { sourceLabel } from "../sources";
 import { EmptyState, ErrorNotice, SelectionCheckbox, Spinner, statusPill, Toolbar } from "../components/common";
 
 /** A queue or history title opens its series page, like Sonarr's series links. */
@@ -66,6 +67,7 @@ function Queue() {
   const [retryNotice, setRetryNotice] = useState("");
   const [filter, setFilter] = useState("");
   const [rootFilter, setRootFilter] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("");
   const [page, setPage] = useState(0);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const { data, isLoading, error, refetch } = useQuery({
@@ -148,8 +150,10 @@ function Queue() {
   const roots = [...new Map(data.filter(item => item.root_folder_id != null)
     .map(item => [String(item.root_folder_id), item.root_folder_path] as const)).entries()]
     .sort((a, b) => a[1].localeCompare(b[1]));
-  const hasFilter = Boolean(filter.trim() || rootFilter);
+  const sources = [...new Set(data.map(item => item.source_name).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const hasFilter = Boolean(filter.trim() || rootFilter || sourceFilter);
   const matches = data.filter(item => (!rootFilter || rootKey(item) === rootFilter)
+    && (!sourceFilter || item.source_name === sourceFilter)
     && `${item.title} ${item.series_title} ${item.source_name}`.toLowerCase().includes(filter.trim().toLowerCase()));
   // Bulk actions must never include downloads hidden by the current filters.
   const selectedVisible = matches.filter((item) => selected.has(item.id)).map((item) => item.id);
@@ -193,6 +197,14 @@ function Queue() {
           {rootFilter && rootFilter !== "unassigned" && !roots.some(([id]) => id === rootFilter)
             && <option value={rootFilter}>Selected root folder (no downloads)</option>}
           <option value="unassigned">Not assigned</option>
+        </select>
+        <label htmlFor="queue-source">Source</label>
+        <select id="queue-source" value={sourceFilter}
+          onChange={event => { setSourceFilter(event.target.value); setPage(0); setSelected(new Set()); }}>
+          <option value="">All sources</option>
+          {sources.map(name => <option key={name} value={name}>{sourceLabel(name)}</option>)}
+          {sourceFilter && !sources.includes(sourceFilter)
+            && <option value={sourceFilter}>{sourceLabel(sourceFilter)} (no downloads)</option>}
         </select>
       </div>
       <p className="section-hint">Root folder is the series’ library destination, including where torrent downloads are imported. Filters apply to selection, retries and removal.</p>

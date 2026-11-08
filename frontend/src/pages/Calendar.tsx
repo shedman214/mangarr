@@ -99,17 +99,29 @@ function ReleasedRow({ item }: { item: CalendarRelease }) {
 
 export default function Calendar() {
   const [range, setRange] = useState(loadRange);
+  const [query, setQuery] = useState("");
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["calendar", range],
     queryFn: () => api.get<CalendarData>(`/calendar?days_back=${range}&days_ahead=${range}`),
   });
 
-  const released = data ? groupByDay(data.released, (r) => r.released_at) : [];
-  const expected = data ? groupByDay(data.expected, (e) => e.expected_at) : [];
+  const q = query.trim().toLowerCase();
+  const named = <T extends { series_title: string }>(items: T[]) =>
+    q ? items.filter((item) => item.series_title.toLowerCase().includes(q)) : items;
+  const released = data ? groupByDay(named(data.released), (r) => r.released_at) : [];
+  const expected = data ? groupByDay(named(data.expected), (e) => e.expected_at) : [];
 
   return (
     <>
       <Toolbar title="Calendar">
+        <input
+          type="search"
+          className="toolbar-search"
+          placeholder="Search by name…"
+          aria-label="Search calendar by name"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
         <select
           value={range}
           aria-label="Date range"
@@ -147,7 +159,9 @@ export default function Calendar() {
                   Predicted from each ongoing series&apos; usual release rhythm, so treat the day as an
                   estimate.
                 </p>
-                {expected.length === 0 && <p className="dim">Nothing expected in this range.</p>}
+                {expected.length === 0 && (
+                  <p className="dim">{q ? `Nothing expected matches “${query.trim()}”.` : "Nothing expected in this range."}</p>
+                )}
                 {expected.map(([day, items]) => (
                   <div className="agenda-day" key={day}>
                     <h3>{dayLabel(day)}</h3>
@@ -160,7 +174,9 @@ export default function Calendar() {
               <section>
                 <h2 className="calendar-heading">Recently released</h2>
                 <p className="section-hint">Chapter release dates reported to MangaUpdates.</p>
-                {released.length === 0 && <p className="dim">No releases in this range.</p>}
+                {released.length === 0 && (
+                  <p className="dim">{q ? `No releases match “${query.trim()}”.` : "No releases in this range."}</p>
+                )}
                 {released.map(([day, items]) => (
                   <div className="agenda-day" key={day}>
                     <h3>{dayLabel(day)}</h3>
