@@ -629,6 +629,9 @@ class CalendarReleaseOut(BaseModel):
     released_at: datetime
     downloaded: bool
     monitored: bool
+    # "", "queued", "downloading" or "importing": already being fetched
+    download_status: str = ""
+    download_progress: float = 0.0
 
 
 class CalendarExpectedOut(BaseModel):
@@ -647,6 +650,16 @@ class CalendarExpectedOut(BaseModel):
 class CalendarOut(BaseModel):
     released: list[CalendarReleaseOut]
     expected: list[CalendarExpectedOut]
+
+
+class CalendarSearchIn(BaseModel):
+    chapter_ids: list[int]
+
+
+class CalendarSearchOut(BaseModel):
+    # missing chapters accepted for the search, and the series they belong to
+    chapters: int
+    series: int
 
 
 # ---------------------------------------------------- related / recommended

@@ -340,6 +340,8 @@ export interface CalendarRelease {
   released_at: string;
   downloaded: boolean;
   monitored: boolean;
+  download_status: "" | "queued" | "downloading" | "importing";
+  download_progress: number;
 }
 
 export interface CalendarExpected {

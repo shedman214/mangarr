@@ -1,18 +1,60 @@
+import asyncio
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
-from ..models import Chapter, Series
+from ..models import Chapter, Download, DownloadStatus, Series
 from ..release_schedule import cadence_label, release_schedule
-from ..schemas import CalendarExpectedOut, CalendarOut, CalendarReleaseOut
+from ..schemas import (
+    CalendarExpectedOut,
+    CalendarOut,
+    CalendarReleaseOut,
+    CalendarSearchIn,
+    CalendarSearchOut,
+)
 
 router = APIRouter(tags=["calendar"])
 
 MAX_RELEASED = 500
+MAX_SEARCH = 1000  # chapters per Search request
+
+# the loop only holds weak references to tasks; keep searches alive until done
+_background_tasks: set[asyncio.Task] = set()
+
+
+@router.post("/calendar/search", response_model=CalendarSearchOut, status_code=202)
+async def calendar_search(body: CalendarSearchIn, session: AsyncSession = Depends(get_session)):
+    """Search linked sources for these missing chapters in the background
+    (Calendar's Search all missing and per-row Search). Chapters that are
+    downloaded, excluded, already queued or unknown are ignored."""
+    from ..jobs.tasks import search_chapters
+
+    ids = list(dict.fromkeys(body.chapter_ids))
+    if not ids:
+        raise HTTPException(422, "No chapters given")
+    if len(ids) > MAX_SEARCH:
+        raise HTTPException(422, f"At most {MAX_SEARCH} chapters per search")
+    busy = select(Download.chapter_id).where(
+        Download.chapter_id.isnot(None),
+        Download.status.in_([DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING, DownloadStatus.IMPORTING]),
+    )
+    rows = (await session.execute(
+        select(Chapter.id, Chapter.series_id).where(
+            Chapter.id.in_(ids),
+            Chapter.downloaded == False,  # noqa: E712
+            Chapter.excluded == False,  # noqa: E712
+            Chapter.id.notin_(busy),  # already queued or downloading
+        )
+    )).all()
+    if rows:
+        task = asyncio.get_running_loop().create_task(search_chapters([r[0] for r in rows]))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+    return CalendarSearchOut(chapters=len(rows), series=len({r[1] for r in rows}))
 
 
 @router.get("/calendar", response_model=CalendarOut)
@@ -37,6 +79,19 @@ async def calendar(
         .order_by(Chapter.released_at.desc(), Series.title, Chapter.number)
         .limit(MAX_RELEASED)
     )
+    chapter_rows = rows.all()
+    # chapters already in the queue show that instead of "Missing"
+    active = {
+        chapter_id: (status, progress)
+        for chapter_id, status, progress in (await session.execute(
+            select(Download.chapter_id, Download.status, Download.progress).where(
+                Download.chapter_id.in_([ch.id for ch, *_ in chapter_rows]),
+                Download.status.in_([
+                    DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING, DownloadStatus.IMPORTING,
+                ]),
+            )
+        )).all()
+    } if chapter_rows else {}
     released = [
         CalendarReleaseOut(
             series_id=ch.series_id,
@@ -49,8 +104,11 @@ async def calendar(
             released_at=ch.released_at,
             downloaded=ch.downloaded,
             monitored=series_monitored and ch.monitored,
+            download_status="" if ch.downloaded or ch.id not in active
+            else getattr(active[ch.id][0], "value", active[ch.id][0]),
+            download_progress=0.0 if ch.id not in active else float(active[ch.id][1] or 0),
         )
-        for ch, title, cover, series_monitored in rows.all()
+        for ch, title, cover, series_monitored in chapter_rows
     ]
 
     # only what the cadence needs, not whole chapter rows for the library

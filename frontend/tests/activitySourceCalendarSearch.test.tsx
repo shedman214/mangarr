@@ -41,9 +41,9 @@ test("the title search also matches a source's display name", async () => {
 });
 
 const today = new Date().toISOString();
-const release = (id: number, title: string) => ({
+const release = (id: number, title: string, extra: Record<string, unknown> = {}) => ({
   series_id: id, series_title: title, cover_url: "", chapter_id: id, number: id, volume: null, title: "",
-  released_at: today, downloaded: false, monitored: true,
+  released_at: today, downloaded: false, monitored: true, download_status: "", download_progress: 0, ...extra,
 });
 const expected = (id: number, title: string) => ({
   series_id: id, series_title: title, cover_url: "", expected_at: today, cadence_days: 7, cadence_label: "weekly",
@@ -66,4 +66,42 @@ test("Calendar search filters both lists by name", async () => {
   await userEvent.type(screen.getByRole("searchbox", { name: "Search calendar by name" }), "zzz");
   expect(screen.getByText("Nothing expected matches “zzz”.")).toBeInTheDocument();
   expect(screen.getByText("No releases match “zzz”.")).toBeInTheDocument();
+});
+
+test("Calendar: Search all missing sends every shown missing chapter, and a row searches just its own", async () => {
+  const calls = fakeApi((method, path) => method === "POST" && path === "/calendar/search"
+    ? { status: 202, body: { chapters: 1, series: 1 } }
+    : path.startsWith("/calendar") ? { body: {
+      released: [
+        release(1, "Alpha Story"),
+        release(2, "Beta Tale"),
+        release(3, "Gamma Days", { downloaded: true }),
+        release(4, "Delta Road", { download_status: "downloading", download_progress: 0.18 }),
+      ],
+      expected: [],
+    } } : { body: [] });
+  renderWithClient(<Calendar />);
+  await screen.findByText("Beta Tale");
+  // already downloading: shows it, and offers no search
+  expect(screen.getByText("Downloading 18%")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Search for Delta Road/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Search for Gamma Days/ })).toBeNull();
+
+  await userEvent.click(screen.getByRole("button", { name: "Search for Beta Tale Ch. 2" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("Searching for 1 chapter in 1 series");
+  expect(calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ chapter_ids: [2] });
+
+  await userEvent.click(screen.getByRole("button", { name: /Search all missing \(2\)/ }));
+  expect(calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ chapter_ids: [1, 2] });
+});
+
+test("Calendar: Search all missing follows the name search", async () => {
+  const calls = fakeApi((method, path) => method === "POST" ? { status: 202, body: { chapters: 1, series: 1 } }
+    : path.startsWith("/calendar") ? { body: { released: [release(1, "Alpha Story"), release(2, "Beta Tale")], expected: [] } }
+    : { body: [] });
+  renderWithClient(<Calendar />);
+  await screen.findByText("Beta Tale");
+  await userEvent.type(screen.getByRole("searchbox", { name: "Search calendar by name" }), "beta");
+  await userEvent.click(screen.getByRole("button", { name: /Search all missing \(1\)/ }));
+  expect(calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ chapter_ids: [2] });
 });

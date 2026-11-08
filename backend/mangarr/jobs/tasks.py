@@ -1832,6 +1832,45 @@ def failed_grab_blocks(now: datetime):
     )
 
 
+async def search_chapters(chapter_ids: list[int]) -> int:
+    """Calendar → Search: an explicit search for exactly these missing
+    chapters (monitored or not), one series at a time under its lock. Every
+    other chapter of the series is excluded, upgrades included. Returns how
+    many downloads were queued."""
+    async with session_scope() as session:
+        rows = (await session.execute(
+            select(Chapter.series_id, Chapter.number).where(
+                Chapter.id.in_(chapter_ids),
+                Chapter.downloaded == False,  # noqa: E712
+                Chapter.excluded == False,  # noqa: E712
+            )
+        )).all()
+    targets: dict[int, set[float]] = {}
+    for series_id, number in rows:
+        targets.setdefault(series_id, set()).add(number)
+    queued = 0
+    for series_id, numbers in targets.items():
+        lock = await acquire_series_lock(series_id)
+        try:
+            async with session_scope() as session:
+                values = await registry.apply_settings(session)
+                series = await _load_series(session, series_id)
+                if series is None:
+                    continue
+                others = {c.number for c in series.chapters} - numbers
+                n = await grab_missing_chapters(
+                    session, series, values, only_monitored=False, exclude_numbers=others,
+                )
+                queued += n
+                log.info("Calendar search for %r chapter(s) %s: %d queued",
+                         series.title, sorted(numbers), n)
+        except Exception:
+            log.exception("calendar search failed for series %d", series_id)
+        finally:
+            lock.release()
+    return queued
+
+
 async def grab_missing_chapters(
     session: AsyncSession, series: Series, values: dict[str, str],
     only_monitored: bool = True,
