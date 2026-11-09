@@ -144,3 +144,16 @@ export const statusPill: Record<string, string> = {
   unmonitored: "gray",
   deleted: "red",
 };
+
+/** A chapter that is already being fetched: Queued, Downloading 18 % or
+ * Importing, so nobody searches for it again. */
+export function DownloadPill({ item }: { item: { status: string; progress: number } }) {
+  const label =
+    item.status === "downloading" ? `Downloading ${Math.round(item.progress * 100)}%` :
+    item.status === "importing" ? "Importing" : "Queued";
+  return (
+    <span className="pill blue" title="Already in the download queue (see Activity)">
+      {label}
+    </span>
+  );
+}

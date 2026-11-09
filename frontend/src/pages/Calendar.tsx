@@ -1,9 +1,14 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { CalendarData, CalendarExpected, CalendarRelease } from "../api/types";
-import { EmptyState, ErrorNotice, Spinner, Toolbar, chapterLabel } from "../components/common";
+import { DownloadPill, EmptyState, ErrorNotice, Spinner, Toolbar, chapterLabel } from "../components/common";
+
+type SearchResult = { chapters: number; series: number };
+
+/** Missing and not already in the queue: what Search can ask for. */
+const searchable = (item: CalendarRelease) => !item.downloaded && !item.download_status;
 
 const RANGE_KEY = "calendar-range";
 
@@ -75,7 +80,11 @@ function ExpectedRow({ item }: { item: CalendarExpected }) {
   );
 }
 
-function ReleasedRow({ item }: { item: CalendarRelease }) {
+function ReleasedRow({ item, onSearch, searching }: {
+  item: CalendarRelease;
+  onSearch: (ids: number[]) => void;
+  searching: boolean;
+}) {
   return (
     <div className="agenda-row">
       <Cover url={item.cover_url} />
@@ -88,10 +97,25 @@ function ReleasedRow({ item }: { item: CalendarRelease }) {
       </div>
       {item.downloaded ? (
         <span className="pill green">Downloaded</span>
-      ) : item.monitored ? (
-        <span className="pill orange">Missing</span>
+      ) : item.download_status ? (
+        <DownloadPill item={{ status: item.download_status, progress: item.download_progress }} />
       ) : (
-        <span className="pill gray">Unmonitored</span>
+        <>
+          <button
+            className="btn sm icon-btn"
+            aria-label={`Search for ${item.series_title} ${chapterLabel(item.number, item.volume)}`}
+            title="Search linked sources for this chapter now"
+            disabled={searching}
+            onClick={() => onSearch([item.chapter_id])}
+          >
+            🔍
+          </button>
+          {item.monitored ? (
+            <span className="pill orange">Missing</span>
+          ) : (
+            <span className="pill gray">Unmonitored</span>
+          )}
+        </>
       )}
     </div>
   );
@@ -100,20 +124,53 @@ function ReleasedRow({ item }: { item: CalendarRelease }) {
 export default function Calendar() {
   const [range, setRange] = useState(loadRange);
   const [query, setQuery] = useState("");
+  const [notice, setNotice] = useState("");
+  // after a search: refresh for two minutes so found chapters move to Queued, then stop
+  const [pollUntil, setPollUntil] = useState(0);
+  useEffect(() => {
+    if (!pollUntil) return;
+    const timer = setTimeout(() => { setPollUntil(0); setNotice(""); }, Math.max(0, pollUntil - Date.now()));
+    return () => clearTimeout(timer);
+  }, [pollUntil]);
+  const queryClient = useQueryClient();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["calendar", range],
     queryFn: () => api.get<CalendarData>(`/calendar?days_back=${range}&days_ahead=${range}`),
+    // while searches run, refresh so rows move to Queued / Downloading
+    refetchInterval: pollUntil ? 5000 : false,
+  });
+  const search = useMutation({
+    mutationFn: (chapterIds: number[]) => api.post<SearchResult>("/calendar/search", { chapter_ids: chapterIds }),
+    onSuccess: (res) => {
+      setNotice(res.chapters === 0
+        ? "Nothing to search: those chapters are already downloaded or queued."
+        : `Searching for ${res.chapters} chapter${res.chapters === 1 ? "" : "s"} in ${res.series} series. `
+          + "Found chapters move to Queued here and appear in Activity.");
+      setPollUntil(res.chapters ? Date.now() + 120_000 : 0);
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      void queryClient.invalidateQueries({ queryKey: ["queue"] });
+    },
   });
 
   const q = query.trim().toLowerCase();
   const named = <T extends { series_title: string }>(items: T[]) =>
     q ? items.filter((item) => item.series_title.toLowerCase().includes(q)) : items;
   const released = data ? groupByDay(named(data.released), (r) => r.released_at) : [];
+  // follows the name search, so "all missing" means all missing that are shown
+  const missingIds = data ? named(data.released).filter(searchable).map((r) => r.chapter_id) : [];
   const expected = data ? groupByDay(named(data.expected), (e) => e.expected_at) : [];
 
   return (
     <>
       <Toolbar title="Calendar">
+        <button
+          className="btn"
+          title="Search linked sources now for every missing chapter shown below"
+          disabled={missingIds.length === 0 || search.isPending}
+          onClick={() => search.mutate(missingIds)}
+        >
+          {search.isPending ? "Searching…" : `🔍 Search all missing (${missingIds.length})`}
+        </button>
         <input
           type="search"
           className="toolbar-search"
@@ -142,6 +199,8 @@ export default function Calendar() {
       </Toolbar>
       <div className="content calendar-page">
         <ErrorNotice error={error} retry={() => void refetch()} />
+        <ErrorNotice error={search.error} />
+        {notice && <p className="section-hint" role="status">{notice}</p>}
         {isLoading ? (
           <Spinner />
         ) : data && data.released.length === 0 && data.expected.length === 0 ? (
@@ -181,7 +240,8 @@ export default function Calendar() {
                   <div className="agenda-day" key={day}>
                     <h3>{dayLabel(day)}</h3>
                     {items.map((item) => (
-                      <ReleasedRow key={item.chapter_id} item={item} />
+                      <ReleasedRow key={item.chapter_id} item={item}
+                        onSearch={(ids) => search.mutate(ids)} searching={search.isPending} />
                     ))}
                   </div>
                 ))}

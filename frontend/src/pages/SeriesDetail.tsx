@@ -35,6 +35,7 @@ import { RelatedTitles } from "../components/RelatedTitles";
 import { sanitizeDescription } from "../sanitize";
 import { sourceLabel } from "../sources";
 import { SeriesRootFolder } from "../components/SeriesRootFolder";
+import { DownloadPill } from "../components/common";
 import { RemoveSeriesModal } from "../components/RemoveSeriesModal";
 
 export function InteractiveSearch({
@@ -835,6 +836,13 @@ export default function SeriesDetail() {
   }
   const isVolumeArchive = (path: string) => (fileCounts[path] ?? 0) > 1;
   const activeDownloads = (queue ?? []).filter((item) => item.series_id === seriesId);
+  // a chapter already in the queue shows that instead of "Available", so it
+  // isn't searched for again
+  const inQueue = new Map(
+    activeDownloads
+      .filter((item) => item.chapter_id != null && ["queued", "downloading", "importing"].includes(item.status))
+      .map((item) => [item.chapter_id as number, item] as const),
+  );
   const busyNotice =
     scan.isPending ? "Scanning disk and matching files…" :
     applyResync.isPending ? "Applying volume resync…" :
@@ -950,6 +958,8 @@ export default function SeriesDetail() {
                 <span className="pill green" title={downloadedTitle(ch)}>
                   Downloaded
                 </span>
+              ) : inQueue.has(ch.id) ? (
+                <DownloadPill item={inQueue.get(ch.id)!} />
               ) : ch.available_sources === null ? (
                 <span className="pill gray" title="Direct-source availability has not been refreshed yet">
                   Missing
