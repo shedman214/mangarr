@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
@@ -125,12 +125,19 @@ export default function Calendar() {
   const [range, setRange] = useState(loadRange);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
+  // after a search: refresh for two minutes so found chapters move to Queued, then stop
+  const [pollUntil, setPollUntil] = useState(0);
+  useEffect(() => {
+    if (!pollUntil) return;
+    const timer = setTimeout(() => { setPollUntil(0); setNotice(""); }, Math.max(0, pollUntil - Date.now()));
+    return () => clearTimeout(timer);
+  }, [pollUntil]);
   const queryClient = useQueryClient();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["calendar", range],
     queryFn: () => api.get<CalendarData>(`/calendar?days_back=${range}&days_ahead=${range}`),
     // while searches run, refresh so rows move to Queued / Downloading
-    refetchInterval: notice ? 5000 : false,
+    refetchInterval: pollUntil ? 5000 : false,
   });
   const search = useMutation({
     mutationFn: (chapterIds: number[]) => api.post<SearchResult>("/calendar/search", { chapter_ids: chapterIds }),
@@ -139,6 +146,7 @@ export default function Calendar() {
         ? "Nothing to search: those chapters are already downloaded or queued."
         : `Searching for ${res.chapters} chapter${res.chapters === 1 ? "" : "s"} in ${res.series} series. `
           + "Found chapters move to Queued here and appear in Activity.");
+      setPollUntil(res.chapters ? Date.now() + 120_000 : 0);
       void queryClient.invalidateQueries({ queryKey: ["calendar"] });
       void queryClient.invalidateQueries({ queryKey: ["queue"] });
     },
