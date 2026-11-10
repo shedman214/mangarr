@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Integer, cast, func, select
+from sqlalchemy import Integer, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import __version__
@@ -46,17 +46,28 @@ async def system_status(session: AsyncSession = Depends(get_session)):
     )
 
 
+def _wanted_filters(q: str = ""):
+    """Missing monitored chapters of monitored series; `q` narrows them to series whose title or any
+    alternative title contains it (case-insensitive)."""
+    filters = [
+        Chapter.monitored == True,  # noqa: E712
+        Chapter.downloaded == False,  # noqa: E712
+        Chapter.excluded == False,  # noqa: E712
+        Series.monitored == True,  # noqa: E712
+    ]
+    q = q.strip() if isinstance(q, str) else ""  # called directly, the default is FastAPI's Query marker
+    if q:
+        like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        filters.append(or_(Series.title.ilike(like, escape="\\"), Series.alt_titles.ilike(like, escape="\\")))
+    return filters
+
+
 @router.get("/wanted", response_model=list[WantedItemOut])
-async def wanted(limit: int = 100, session: AsyncSession = Depends(get_session), offset: int = 0):
+async def wanted(limit: int = 100, session: AsyncSession = Depends(get_session), offset: int = 0, q: str = ""):
     result = await session.execute(
         select(Chapter, Series.title, Series.cover_url)
         .join(Series, Chapter.series_id == Series.id)
-        .where(
-            Chapter.monitored == True,  # noqa: E712
-            Chapter.downloaded == False,  # noqa: E712
-            Chapter.excluded == False,  # noqa: E712
-            Series.monitored == True,  # noqa: E712
-        )
+        .where(*_wanted_filters(q))
         .order_by(Series.title, Series.id, Chapter.number, Chapter.id)
         .offset(offset)
         .limit(limit)
@@ -80,14 +91,12 @@ async def wanted_page(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_session),
+    q: str = Query("", max_length=200),  # last, so existing positional callers keep working
 ):
     total = await session.scalar(
-        select(func.count(Chapter.id)).join(Series).where(
-            Chapter.monitored == True, Chapter.downloaded == False,
-            Chapter.excluded == False, Series.monitored == True,
-        )
+        select(func.count(Chapter.id)).join(Series).where(*_wanted_filters(q))
     )
-    return {"items": await wanted(limit, session, offset), "total": total}
+    return {"items": await wanted(limit, session, offset, q=q), "total": total}
 
 
 @router.get("/rootfolders", response_model=list[RootFolderOut])
