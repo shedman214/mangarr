@@ -23,3 +23,16 @@ test("searching Wanted asks the server for matching chapters, from page 1", asyn
   await userEvent.type(screen.getByRole("searchbox", { name: "Search wanted by name" }), "zzz");
   expect(await screen.findByText("No wanted chapters match “zzz”.")).toBeInTheDocument();
 });
+
+test("a search over 200 characters asks to shorten it instead of requesting", async () => {
+  const calls = fakeApi(() => ({ body: { items: [item(1, "Alpha Quest")], total: 1 } }));
+  renderWithClient(<Wanted />);
+  await screen.findByText("Alpha Quest");
+  const before = calls.length;
+  const box = screen.getByRole("searchbox", { name: "Search wanted by name" });
+  await userEvent.click(box);
+  await userEvent.paste("x".repeat(201));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Shorten the search to 200 characters or fewer.");
+  await new Promise((r) => setTimeout(r, 400));
+  expect(calls.slice(before).some((c) => c.path.includes("q="))).toBe(false);
+});

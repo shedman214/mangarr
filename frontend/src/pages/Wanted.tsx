@@ -10,10 +10,14 @@ export default function Wanted() {
   const [query, setQuery] = useState("");
   // the server searches all wanted chapters; wait for a pause in typing before asking
   const [q, setQ] = useState("");
+  const MAX_SEARCH = 200; // the server's limit
+  const tooLong = query.trim().length > MAX_SEARCH;
   useEffect(() => {
-    const timer = setTimeout(() => { setQ(query.trim()); setOffset(0); }, 300);
+    const next = query.trim();
+    if (next === q || next.length > MAX_SEARCH) return; // unchanged (e.g. on first load) or too long: keep the page
+    const timer = setTimeout(() => { setQ(next); setOffset(0); }, 300);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, q]);
   const pageSize = 100;
   const { data: page, isLoading, error, refetch } = useQuery({
     queryKey: ["wanted", offset, q],
@@ -46,6 +50,7 @@ export default function Wanted() {
         </div>
       </Toolbar>
       <div className="content">
+        {tooLong && <p className="section-hint" role="alert">Shorten the search to {MAX_SEARCH} characters or fewer.</p>}
         <ErrorNotice error={error} retry={() => void refetch()} />
         {isLoading ? (
           <Spinner />
