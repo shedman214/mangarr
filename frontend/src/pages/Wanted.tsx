@@ -7,10 +7,19 @@ import { chapterLabel, EmptyState, ErrorNotice, Spinner, Toolbar } from "../comp
 
 export default function Wanted() {
   const [offset, setOffset] = useState(0);
+  const [query, setQuery] = useState("");
+  // the server searches all wanted chapters; wait for a pause in typing before asking
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => { setQ(query.trim()); setOffset(0); }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
   const pageSize = 100;
   const { data: page, isLoading, error, refetch } = useQuery({
-    queryKey: ["wanted", offset],
-    queryFn: () => api.get<{ items: WantedItem[]; total: number }>(`/wanted/page?limit=${pageSize}&offset=${offset}`),
+    queryKey: ["wanted", offset, q],
+    queryFn: () => api.get<{ items: WantedItem[]; total: number }>(
+      `/wanted/page?limit=${pageSize}&offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ""}`,
+    ),
     refetchInterval: 15000,
   });
 
@@ -22,6 +31,14 @@ export default function Wanted() {
   return (
     <>
       <Toolbar title="Wanted" className="wanted-toolbar">
+        <input
+          type="search"
+          className="toolbar-search"
+          placeholder="Search by name…"
+          aria-label="Search wanted by name"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
         <div className="wanted-pagination" aria-label="Wanted pages">
         <button className="btn" disabled={offset === 0 || isLoading} onClick={() => setOffset(Math.max(0, offset - pageSize))}>Previous</button>
         {page && <span>{page.total === 0 ? "0" : `${offset + 1}–${offset + data!.length}`} of {page.total} chapters</span>}
@@ -33,11 +50,15 @@ export default function Wanted() {
         {isLoading ? (
           <Spinner />
         ) : !data && error ? null : !data || data.length === 0 ? (
-          <EmptyState
-            icon="✔"
-            title="Nothing wanted"
-            hint="All monitored chapters are downloaded."
-          />
+          q ? (
+            <EmptyState icon="🔍" title="No matches" hint={`No wanted chapters match “${q}”.`} />
+          ) : (
+            <EmptyState
+              icon="✔"
+              title="Nothing wanted"
+              hint="All monitored chapters are downloaded."
+            />
+          )
         ) : (
           <table className="data-table card-table wanted-table">
             <thead>
