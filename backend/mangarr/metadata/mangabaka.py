@@ -1,11 +1,13 @@
 """MangaBaka (api.mangabaka.org): the extra series metadata Kavita reads from
 ComicInfo.xml — writers, artists, publishers, tags, age rating, its page as a
-web link. Only used for ComicInfo; titles, status and totals still come from
-MangaUpdates/AniList.
+web link — and a third place to add series from. Add New Series lists the
+MangaBaka entries MangaUpdates and AniList don't have (western comics and
+webtoons such as Dungeon Crawler Carl); series added that way take their
+titles, status and totals from MangaBaka.
 
-Series are looked up by the AniList or MangaUpdates id mangarr already has, so
-there is no title guessing. The API is free for personal, non-commercial use
-with credit to MangaBaka, which ComicInfo's Notes carries.
+Series are looked up by the AniList, MangaUpdates or MangaBaka id mangarr
+already has, so there is no title guessing. The API is free for personal,
+non-commercial use with credit to MangaBaka, which ComicInfo's Notes carries.
 """
 
 from dataclasses import asdict, dataclass, field
@@ -14,6 +16,7 @@ import httpx
 
 from .. import USER_AGENT
 from ..util import RateLimiter, rl_request
+from .base import SeriesMetadata
 
 API_URL = "https://api.mangabaka.org/v1"
 
@@ -33,6 +36,16 @@ AGE_RATINGS = {
 }
 
 _B36 = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+# MangaBaka status → models.SeriesStatus value
+_STATUSES = {
+    "releasing": "releasing",
+    "completed": "finished",
+    "hiatus": "hiatus",
+    "cancelled": "cancelled",
+    "upcoming": "not_yet_released",
+}
+MAX_SEARCH = 50  # the search endpoint's largest page
 
 
 def mangaupdates_slug(series_id: int) -> str:
@@ -112,7 +125,58 @@ def parse_series(record: dict) -> ComicExtras:
     )
 
 
+def _int(value) -> int | None:
+    """MangaBaka sends totals as strings ("61"); keep whole positive numbers."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return int(number) if number > 0 and number.is_integer() else None
+
+
+def to_metadata(record: dict) -> SeriesMetadata:
+    """A MangaBaka series record as the provider-neutral SeriesMetadata."""
+    title = record.get("title") or "Unknown"
+    alt = [
+        record.get("native_title"),
+        record.get("romanized_title"),
+        *((t or {}).get("title") for t in record.get("titles") or []),
+        *(
+            (t or {}).get("title")
+            for group in (record.get("secondary_titles") or {}).values()
+            for t in group or []
+        ),
+    ]
+    year = record.get("year")
+    return SeriesMetadata(
+        provider="mangabaka",
+        provider_id=str(record["id"]),
+        title=title,
+        alt_titles=[t for t in _unique(alt) if t.lower() != title.lower()],
+        description=record.get("description") or "",
+        status=_STATUSES.get(record.get("status") or "", "unknown"),
+        year=year if isinstance(year, int) else None,
+        cover_url=((record.get("cover") or {}).get("raw") or {}).get("url") or "",
+        genres=_unique(g.replace("_", " ").title() for g in record.get("genres") or []),
+        total_chapters=_int(record.get("total_chapters")),
+        total_volumes=_int(record.get("final_volume")),
+        publishers=publisher_names(record.get("publishers") or []),
+    )
+
+
+def linked_elsewhere(record: dict) -> bool:
+    """Whether MangaUpdates or AniList knows this series too (then those are
+    searched for it, so Add New Series doesn't list it twice)."""
+    source = record.get("source") or {}
+    return any(
+        (source.get(name) or {}).get("id") not in (None, "")
+        for name in ("manga_updates", "anilist")
+    )
+
+
 class MangaBakaClient:
+    name = "mangabaka"
+
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client or httpx.AsyncClient(
             headers={"User-Agent": USER_AGENT}, timeout=30
@@ -124,6 +188,35 @@ class MangaBakaClient:
             return None
         resp.raise_for_status()
         return resp.json().get("data")
+
+    async def _search_records(self, query: str, limit: int) -> list[dict]:
+        resp = await rl_request(
+            self._client, "GET", f"{API_URL}/series/search",
+            params={"q": query, "limit": max(1, min(limit, MAX_SEARCH))}, limiter=_limiter,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data")
+        return [r for r in data or [] if isinstance(r, dict) and r.get("id") is not None
+                and r.get("state", "active") == "active"]
+
+    async def search(self, query: str, limit: int = 20) -> list[SeriesMetadata]:
+        return [to_metadata(r) for r in await self._search_records(query, limit)]
+
+    async def search_unlinked(self, query: str, limit: int = 20) -> list[SeriesMetadata]:
+        """Only the entries neither MangaUpdates nor AniList has."""
+        records = await self._search_records(query, limit)
+        return [to_metadata(r) for r in records if not linked_elsewhere(r)]
+
+    async def get_series(self, provider_id: str) -> SeriesMetadata | None:
+        record = await self._record(int(provider_id))
+        return to_metadata(record) if record else None
+
+    async def _record(self, mangabaka_id: int) -> dict | None:
+        record = await self._get(f"/series/{int(mangabaka_id)}")
+        if record and record.get("state") not in (None, "active") and record.get("merged_with"):
+            # a merged entry points at the one that replaced it
+            record = await self._get(f"/series/{int(record['merged_with'])}")
+        return record
 
     async def _by_source(self, path: str) -> dict | None:
         data = await self._get(path)
@@ -159,10 +252,15 @@ class MangaBakaClient:
         return covers
 
     async def lookup(
-        self, anilist_id: int | None = None, mangaupdates_id: int | None = None
+        self, anilist_id: int | None = None, mangaupdates_id: int | None = None,
+        mangabaka_id: int | None = None,
     ) -> ComicExtras | None:
         """The series' MangaBaka extras, or None when MangaBaka doesn't know
-        it under either id."""
+        it under any of the ids (its own id is asked first)."""
+        if mangabaka_id is not None:
+            record = await self._record(int(mangabaka_id))
+            if record:
+                return parse_series(record)
         paths = []
         if anilist_id is not None:
             paths.append(f"/source/anilist/{int(anilist_id)}")

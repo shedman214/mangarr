@@ -66,6 +66,7 @@ class SeriesOut(BaseModel):
     id: int
     anilist_id: int | None
     mangaupdates_id: int | None
+    mangabaka_id: int | None = None
     title: str
     english_title: str = ""
     alt_titles: str = ""  # newline-joined; lets the client match any known name
@@ -126,9 +127,11 @@ class SeriesDetailOut(SeriesOut):
 
 
 class AddSeriesIn(BaseModel):
-    # exactly one of the provider ids (MangaUpdates is the primary provider)
+    # exactly one of the provider ids (MangaUpdates is the primary provider;
+    # MangaBaka for series neither MangaUpdates nor AniList lists)
     mangaupdates_id: int | None = None
     anilist_id: int | None = None
+    mangabaka_id: int | None = None
     root_folder_id: int
     monitored: bool = True
     monitor_mode: MonitorMode = "all"

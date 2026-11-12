@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from ..automation import select_for_series
 from ..db import get_session
 from ..metadata.anilist import provider as anilist
+from ..metadata.mangabaka import provider as mangabaka
 from ..metadata.mangaupdates import provider as mangaupdates
 from ..models import Chapter, Series
 from ..schemas import MetadataResult, ReleaseOut
@@ -30,6 +31,7 @@ class ReleaseSearchResult(BaseModel):
     warnings: list[str]
 
 DIRECT_SEARCH_CONCURRENCY = 4
+MANGABAKA_SEARCH_TIMEOUT = 8.0  # seconds; Add New Series' extra MangaBaka results
 TORRENT_SEARCH_CONCURRENCY = 2
 T = TypeVar("T")
 R = TypeVar("R")
@@ -50,17 +52,41 @@ async def _gather_limited(
 
 
 async def metadata_results(
-    session: AsyncSession, provider: str, query: str, limit: int = 20
+    session: AsyncSession, provider: str, query: str, limit: int = 20,
+    include_mangabaka: bool = False,
 ) -> list[MetadataResult]:
-    """Search a metadata provider, marking results already in the library."""
-    meta_provider = anilist if provider == "anilist" else mangaupdates
-    id_column = Series.anilist_id if provider == "anilist" else Series.mangaupdates_id
-    results = await meta_provider.search(query, limit=limit)
-    in_library = {
-        row[0]: row[1]
-        for row in (await session.execute(select(id_column, Series.id))).all()
-        if row[0] is not None
+    """Search a metadata provider, marking results already in the library.
+    With include_mangabaka (Add New Series), a MangaUpdates search also lists
+    the MangaBaka entries neither MangaUpdates nor AniList has (western comics
+    and webtoons), after MangaUpdates' own; a MangaBaka outage only leaves
+    those out."""
+    columns = {
+        "anilist": Series.anilist_id,
+        "mangaupdates": Series.mangaupdates_id,
+        "mangabaka": Series.mangabaka_id,
     }
+    if provider not in columns:
+        raise HTTPException(422, f"Unknown metadata provider {provider!r}")
+    meta_provider = {"anilist": anilist, "mangaupdates": mangaupdates, "mangabaka": mangabaka}[provider]
+    results = await meta_provider.search(query, limit=limit)
+    if include_mangabaka and provider == "mangaupdates":
+        try:
+            # supplementary: never hold MangaUpdates' results up for long
+            extra = await asyncio.wait_for(
+                mangabaka.search_unlinked(query, limit=limit), MANGABAKA_SEARCH_TIMEOUT
+            )
+        except Exception as exc:
+            log.warning("MangaBaka search failed for %r: %s", query, exc or type(exc).__name__)
+            extra = []
+        # titles that normalize to "" (all non-Latin) can't be compared this way
+        listed = {(key, r.year) for r in results if (key := normalize_title(r.title))}
+        results += [r for r in extra
+                    if not (key := normalize_title(r.title)) or (key, r.year) not in listed]
+    in_library: dict[tuple[str, int], int] = {}
+    for name, column in columns.items():
+        for pid, series_id in (await session.execute(select(column, Series.id))).all():
+            if pid is not None:
+                in_library[(name, int(pid))] = series_id
     return [
         MetadataResult(
             provider=r.provider,
@@ -75,8 +101,8 @@ async def metadata_results(
             genres=r.genres,
             total_chapters=r.total_chapters,
             total_volumes=r.total_volumes,
-            in_library=int(r.provider_id) in in_library,
-            in_library_series_id=in_library.get(int(r.provider_id)),
+            in_library=(r.provider, int(r.provider_id)) in in_library,
+            in_library_series_id=in_library.get((r.provider, int(r.provider_id))),
         )
         for r in results
     ]
@@ -86,7 +112,7 @@ async def metadata_results(
 async def search_metadata(
     q: str, provider: str = "mangaupdates", session: AsyncSession = Depends(get_session)
 ):
-    return await metadata_results(session, provider, q)
+    return await metadata_results(session, provider, q, include_mangabaka=True)
 
 
 def _candidate_matches_series(candidate_titles: list[str], wanted: set[str]) -> bool:

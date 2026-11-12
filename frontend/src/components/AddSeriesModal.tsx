@@ -7,6 +7,13 @@ import { FolderBrowser } from "./FolderBrowser";
 import { MonitorModeFields } from "./SeriesAutomation";
 import { Modal, Toggle } from "./common";
 
+/** The add request's id field for a search result's metadata provider. */
+function providerIdField(provider: string): string {
+  if (provider === "anilist") return "anilist_id";
+  if (provider === "mangabaka") return "mangabaka_id";
+  return "mangaupdates_id";
+}
+
 /** What adding needs to know about a metadata entry — a search result, a
  * related title, or a matched import folder all provide it. */
 export type AddTarget = Pick<
@@ -54,8 +61,7 @@ export function AddSeriesModal({
   const addMutation = useMutation({
     mutationFn: () =>
       api.post<{ id: number }>("/series", {
-        [result.provider === "anilist" ? "anilist_id" : "mangaupdates_id"]:
-          Number(result.provider_id),
+        [providerIdField(result.provider)]: Number(result.provider_id),
         root_folder_id: rootFolderId,
         monitored,
         monitor_mode: monitorMode,

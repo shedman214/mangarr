@@ -153,8 +153,8 @@ def setting(monkeypatch):
 
 
 async def test_refresh_stores_extras_with_mangaupdates_publishers(monkeypatch, setting):
-    async def lookup(anilist_id, mangaupdates_id):
-        assert (anilist_id, mangaupdates_id) == (87216, 36271319846)
+    async def lookup(anilist_id, mangaupdates_id, mangabaka_id=None):
+        assert (anilist_id, mangaupdates_id, mangabaka_id) == (87216, 36271319846, None)
         return parse_series(RECORD)
     monkeypatch.setattr(tasks.mangabaka, "lookup", lookup)
     s = series(comicinfo_extra="")
@@ -166,7 +166,7 @@ async def test_refresh_stores_extras_with_mangaupdates_publishers(monkeypatch, s
 async def test_refresh_off_still_writes_mangaupdates_publishers(monkeypatch, setting):
     setting["mangabaka_metadata"] = "false"
 
-    async def lookup(*_):
+    async def lookup(*_, **__):
         raise AssertionError("MangaBaka must not be called when off")
     monkeypatch.setattr(tasks.mangabaka, "lookup", lookup)
     s = series()
@@ -175,7 +175,7 @@ async def test_refresh_off_still_writes_mangaupdates_publishers(monkeypatch, set
 
 
 async def test_mangabaka_outage_keeps_what_was_stored(monkeypatch, setting):
-    async def lookup(*_):
+    async def lookup(*_, **__):
         raise httpx.ConnectError("down")
     monkeypatch.setattr(tasks.mangabaka, "lookup", lookup)
     s = series()
@@ -185,7 +185,7 @@ async def test_mangabaka_outage_keeps_what_was_stored(monkeypatch, setting):
 
 
 async def test_a_series_mangabaka_stops_finding_keeps_its_data(monkeypatch, setting):
-    async def lookup(*_):
+    async def lookup(*_, **__):
         return None
     monkeypatch.setattr(tasks.mangabaka, "lookup", lookup)
     s = series()

@@ -212,13 +212,23 @@ async def refresh_series_metadata(session: AsyncSession, series: Series) -> None
         except Exception as exc:
             log.warning("mangaupdates link failed for %r: %s", series.title, exc)
 
-    identity_from_mu = series.anilist_id is None and series.mangaupdates_id is not None
+    # a series added from MangaBaka keeps MangaBaka's titles even once it
+    # links to MangaUpdates (which then only adds progress data)
+    identity_from_mu = (
+        series.anilist_id is None and series.mangabaka_id is None
+        and series.mangaupdates_id is not None
+    )
     mu_meta = None
     if series.mangaupdates_id is not None:
         mu_meta = await mangaupdates.get_series(str(series.mangaupdates_id))
-    meta = mu_meta if identity_from_mu else (
-        await anilist.get_series(str(series.anilist_id)) if series.anilist_id else None
-    )
+    if identity_from_mu:
+        meta = mu_meta
+    elif series.anilist_id:
+        meta = await anilist.get_series(str(series.anilist_id))
+    elif series.mangabaka_id:
+        meta = await mangabaka.get_series(str(series.mangabaka_id))
+    else:
+        meta = None
     if meta is not None:
         series.title = meta.title
         series.alt_titles = "\n".join(meta.alt_titles)
@@ -258,7 +268,9 @@ async def refresh_comicinfo_extra(session: AsyncSession, series: Series, mu_meta
     metadata_on = await settings_service.get(session, "mangabaka_metadata") == "true"
     if covers_on or metadata_on:
         try:
-            extras = await mangabaka.lookup(series.anilist_id, series.mangaupdates_id)
+            extras = await mangabaka.lookup(
+                series.anilist_id, series.mangaupdates_id, mangabaka_id=series.mangabaka_id
+            )
             if extras is None:
                 # found before, missing now: keep the stored data (publishers
                 # still update from MangaUpdates below)

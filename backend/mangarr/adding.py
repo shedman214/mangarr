@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .metadata.anilist import provider as anilist
+from .metadata.mangabaka import provider as mangabaka
 from .metadata.mangaupdates import provider as mangaupdates
 from .models import RootFolder, Series, SeriesFolder, SeriesStatus
 from .titles import split_alt_titles, unique_titles
@@ -119,24 +120,37 @@ async def create_series(
     *,
     anilist_id: int | None = None,
     mangaupdates_id: int | None = None,
+    mangabaka_id: int | None = None,
 ) -> Series:
     """Add a series from exactly one provider id and commit it. Raises
     SeriesExists when that id is already in the library and MetadataNotFound
     when the provider doesn't know it. The caller starts the refresh."""
-    if (anilist_id is None) == (mangaupdates_id is None):
-        raise ValueError("Provide exactly one of mangaupdates_id or anilist_id")
+    if sum(i is not None for i in (anilist_id, mangaupdates_id, mangabaka_id)) != 1:
+        raise ValueError("Provide exactly one of mangaupdates_id, anilist_id or mangabaka_id")
     if mangaupdates_id is not None:
         id_filter = Series.mangaupdates_id == mangaupdates_id
         provider, provider_id = mangaupdates, mangaupdates_id
-    else:
+    elif anilist_id is not None:
         id_filter = Series.anilist_id == anilist_id
         provider, provider_id = anilist, anilist_id
+    else:
+        id_filter = Series.mangabaka_id == mangabaka_id
+        provider, provider_id = mangabaka, mangabaka_id
     existing = (await session.execute(select(Series.id).where(id_filter))).scalar_one_or_none()
     if existing is not None:
         raise SeriesExists(existing)
     meta = await provider.get_series(str(provider_id))
     if meta is None:
         raise MetadataNotFound(f"{provider.name} series not found")
+    if mangabaka_id is not None and int(meta.provider_id) != mangabaka_id:
+        # a merged MangaBaka entry answers with the one that replaced it:
+        # store that id, so adding it again later is caught as a duplicate
+        mangabaka_id = int(meta.provider_id)
+        existing = (await session.execute(
+            select(Series.id).where(Series.mangabaka_id == mangabaka_id)
+        )).scalar_one_or_none()
+        if existing is not None:
+            raise SeriesExists(existing)
     alt_titles = unique_titles([*meta.alt_titles, opts.english_title, *opts.alt_titles])
     from . import settings_service
     upgrades = await settings_service.get(session, "upgrades_allowed") == "true"
@@ -146,6 +160,7 @@ async def create_series(
         upgrade_cutoff=upgrade_until,
         anilist_id=anilist_id,
         mangaupdates_id=mangaupdates_id,
+        mangabaka_id=mangabaka_id,
         title=meta.title,
         sort_title=meta.title.lower(),
         alt_titles="\n".join(alt_titles),

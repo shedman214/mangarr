@@ -77,7 +77,7 @@ export default function AddSeries() {
           <input
             autoFocus
             style={{ flex: 1 }}
-            placeholder="Search MangaUpdates for a manga title…"
+            placeholder="Search MangaUpdates (and MangaBaka) for a manga title…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -104,7 +104,7 @@ export default function AddSeries() {
             return (
               <div
                 className="search-result"
-                key={r.provider_id}
+                key={`${r.provider}:${r.provider_id}`}
                 style={clickable ? { cursor: "pointer" } : undefined}
                 title={libraryPath ? "Open manga page" : clickable ? "Add this series" : undefined}
                 onClick={clickable ? open : undefined}
@@ -120,6 +120,11 @@ export default function AddSeries() {
                   <h3>
                     {r.title} {r.year ? <span style={{ color: "var(--text-faint)" }}>({r.year})</span> : null}
                   </h3>
+                  {r.provider === "mangabaka" && (
+                    <div className="alt-title-line" title="Not on MangaUpdates or AniList; added from MangaBaka">
+                      From MangaBaka
+                    </div>
+                  )}
                   {r.english_title && r.english_title !== r.title && (
                     <div className="alt-title-line">English: {r.english_title}</div>
                   )}

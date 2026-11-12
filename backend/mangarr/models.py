@@ -50,6 +50,9 @@ class Series(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     anilist_id: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True)
     mangaupdates_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, nullable=True)
+    # only for series added from MangaBaka (neither MangaUpdates nor AniList
+    # lists them); the others find their MangaBaka entry by those ids
+    mangabaka_id: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True)
     title: Mapped[str] = mapped_column(String)
     sort_title: Mapped[str] = mapped_column(String, default="")
     alt_titles: Mapped[str] = mapped_column(Text, default="")  # newline-separated
