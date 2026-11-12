@@ -142,6 +142,15 @@ async def create_series(
     meta = await provider.get_series(str(provider_id))
     if meta is None:
         raise MetadataNotFound(f"{provider.name} series not found")
+    if mangabaka_id is not None and int(meta.provider_id) != mangabaka_id:
+        # a merged MangaBaka entry answers with the one that replaced it:
+        # store that id, so adding it again later is caught as a duplicate
+        mangabaka_id = int(meta.provider_id)
+        existing = (await session.execute(
+            select(Series.id).where(Series.mangabaka_id == mangabaka_id)
+        )).scalar_one_or_none()
+        if existing is not None:
+            raise SeriesExists(existing)
     alt_titles = unique_titles([*meta.alt_titles, opts.english_title, *opts.alt_titles])
     from . import settings_service
     upgrades = await settings_service.get(session, "upgrades_allowed") == "true"

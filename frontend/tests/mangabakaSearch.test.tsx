@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import AddSeries from "../src/pages/AddSeries";
 import { fakeApi, renderWithClient } from "./helpers";
 
-const result = (provider: string, provider_id: string, title: string) => ({
-  provider, provider_id, title, english_title: "", alt_titles: [], description: "", status: "releasing",
+const result = (provider: string, providerId: string, title: string) => ({
+  provider, provider_id: providerId, title, english_title: "", alt_titles: [], description: "", status: "releasing",
   year: 2025, cover_url: "", genres: [], total_chapters: null, total_volumes: null,
   in_library: false, in_library_series_id: null,
 });

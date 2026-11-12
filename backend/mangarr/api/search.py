@@ -31,6 +31,7 @@ class ReleaseSearchResult(BaseModel):
     warnings: list[str]
 
 DIRECT_SEARCH_CONCURRENCY = 4
+MANGABAKA_SEARCH_TIMEOUT = 8.0  # seconds; Add New Series' extra MangaBaka results
 TORRENT_SEARCH_CONCURRENCY = 2
 T = TypeVar("T")
 R = TypeVar("R")
@@ -70,12 +71,17 @@ async def metadata_results(
     results = await meta_provider.search(query, limit=limit)
     if include_mangabaka and provider == "mangaupdates":
         try:
-            extra = await mangabaka.search_unlinked(query, limit=limit)
+            # supplementary: never hold MangaUpdates' results up for long
+            extra = await asyncio.wait_for(
+                mangabaka.search_unlinked(query, limit=limit), MANGABAKA_SEARCH_TIMEOUT
+            )
         except Exception as exc:
-            log.warning("MangaBaka search failed for %r: %s", query, exc)
+            log.warning("MangaBaka search failed for %r: %s", query, exc or type(exc).__name__)
             extra = []
-        listed = {(normalize_title(r.title), r.year) for r in results}
-        results += [r for r in extra if (normalize_title(r.title), r.year) not in listed]
+        # titles that normalize to "" (all non-Latin) can't be compared this way
+        listed = {(key, r.year) for r in results if (key := normalize_title(r.title))}
+        results += [r for r in extra
+                    if not (key := normalize_title(r.title)) or (key, r.year) not in listed]
     in_library: dict[tuple[str, int], int] = {}
     for name, column in columns.items():
         for pid, series_id in (await session.execute(select(column, Series.id))).all():

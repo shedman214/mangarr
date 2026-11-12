@@ -1,6 +1,8 @@
 """Add New Series also lists MangaBaka entries that neither MangaUpdates nor
 AniList has (western comics and webtoons such as Dungeon Crawler Carl), and
 series can be added and refreshed from MangaBaka."""
+import asyncio
+
 import httpx
 import pytest
 from fastapi import HTTPException
@@ -113,6 +115,33 @@ async def test_add_series_search_lists_mangabaka_after_mangaupdates(maker, monke
             await search.metadata_results(session, "other", "dcc")
 
 
+async def test_non_latin_titles_are_never_treated_as_duplicates(maker, monkeypatch):
+    async def mu_search(query, limit=20):
+        return [mu_result("葬送のフリーレン", year=None)]
+
+    async def mb_unlinked(query, limit=20):
+        return [to_metadata({**DCC, "id": 7, "title": "던전 크롤러", "year": None})]
+    monkeypatch.setattr(search.mangaupdates, "search", mu_search)
+    monkeypatch.setattr(search.mangabaka, "search_unlinked", mb_unlinked)
+    async with maker() as session:
+        results = await search.metadata_results(session, "mangaupdates", "x", include_mangabaka=True)
+    assert [r.provider for r in results] == ["mangaupdates", "mangabaka"]
+
+
+async def test_a_slow_mangabaka_is_cut_off(maker, monkeypatch):
+    async def mu_search(query, limit=20):
+        return [mu_result("Something")]
+
+    async def slow(query, limit=20):
+        await asyncio.sleep(60)
+    monkeypatch.setattr(search.mangaupdates, "search", mu_search)
+    monkeypatch.setattr(search.mangabaka, "search_unlinked", slow)
+    monkeypatch.setattr(search, "MANGABAKA_SEARCH_TIMEOUT", 0.05)
+    async with maker() as session:
+        results = await search.metadata_results(session, "mangaupdates", "x", include_mangabaka=True)
+    assert [r.provider_id for r in results] == ["77"]
+
+
 async def test_a_mangabaka_outage_leaves_the_mangaupdates_results(maker, monkeypatch):
     async def mu_search(query, limit=20):
         return [mu_result("Something")]
@@ -140,6 +169,9 @@ async def test_add_and_refresh_from_mangabaka(maker, monkeypatch):
         with pytest.raises(ValueError):
             await adding.create_series(
                 session, adding.AddOptions(root_folder_id=None), mangabaka_id=1, mangaupdates_id=2)
+        # an old id merged into 362153 is the same series
+        with pytest.raises(adding.SeriesExists):
+            await adding.create_series(session, adding.AddOptions(root_folder_id=None), mangabaka_id=1)
 
         async def no_link(series):
             return False
@@ -152,3 +184,14 @@ async def test_add_and_refresh_from_mangabaka(maker, monkeypatch):
         series.title = "stale"
         await tasks.refresh_series_metadata(session, series)
         assert series.title == "Dungeon Crawler Carl" and series.status == SeriesStatus.HIATUS
+
+
+async def test_a_merged_id_is_stored_as_the_canonical_one(maker, monkeypatch):
+    async def get_series(provider_id):
+        return to_metadata(DCC)  # MangaBaka answers old id 1 with its replacement
+    monkeypatch.setattr(adding.mangabaka, "get_series", get_series)
+    async with maker() as session:
+        series = await adding.create_series(session, adding.AddOptions(root_folder_id=None), mangabaka_id=1)
+        assert series.mangabaka_id == 362153
+        with pytest.raises(adding.SeriesExists):
+            await adding.create_series(session, adding.AddOptions(root_folder_id=None), mangabaka_id=362153)
