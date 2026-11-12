@@ -20,7 +20,9 @@ design; it is the automation half of your manga stack.
 
 - **Library management** — add series via MangaUpdates metadata search
   (covers, descriptions, status; AniList remains available as a fallback
-  provider), poster-grid library, per-series chapter tables with monitor
+  provider; the search also lists MangaBaka entries neither of them has, such
+  as western comics and webtoons, which then take their details from
+  MangaBaka), poster-grid library, per-series chapter tables with monitor
   toggles, wanted/missing view. MangaUpdates tracks scanlation releases per
   chapter, so chapter/volume counts stay current for ongoing series where
   AniList lags, and its release feed fills in chapters no direct source

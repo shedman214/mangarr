@@ -49,6 +49,7 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str | None]] = [
     # (table, column, type, unique index name or None)
     ("series", "mangaupdates_id", "BIGINT", "ux_series_mangaupdates_id"),
     ("series", "folder_pinned", "BOOLEAN NOT NULL DEFAULT 0", None),
+    ("series", "mangabaka_id", "INTEGER", "ux_series_mangabaka_id"),
     ("series", "metadata_refreshed_at", "DATETIME", None),
     ("chapters", "title_source", "VARCHAR NOT NULL DEFAULT ''", None),
     ("chapters", "volume_source", "VARCHAR NOT NULL DEFAULT ''", None),

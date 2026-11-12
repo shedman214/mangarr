@@ -46,6 +46,8 @@ export interface Series {
   id: number;
   anilist_id: number | null;
   mangaupdates_id: number | null;
+  // only for series added from MangaBaka
+  mangabaka_id?: number | null;
   title: string;
   english_title: string;
   alt_titles: string;

@@ -190,8 +190,8 @@ async def list_series(session: AsyncSession = Depends(get_session)):
 
 @router.post("", response_model=SeriesDetailOut, status_code=201)
 async def add_series(body: AddSeriesIn, session: AsyncSession = Depends(get_session)):
-    if (body.mangaupdates_id is None) == (body.anilist_id is None):
-        raise HTTPException(422, "Provide exactly one of mangaupdates_id or anilist_id")
+    if sum(i is not None for i in (body.mangaupdates_id, body.anilist_id, body.mangabaka_id)) != 1:
+        raise HTTPException(422, "Provide exactly one of mangaupdates_id, anilist_id or mangabaka_id")
     if body.monitor_mode == "from_chapter" and body.monitor_from is None:
         raise HTTPException(422, "monitor_from is required for monitor_mode from_chapter")
     opts = AddOptions(
@@ -207,7 +207,8 @@ async def add_series(body: AddSeriesIn, session: AsyncSession = Depends(get_sess
     )
     try:
         series = await create_series(
-            session, opts, anilist_id=body.anilist_id, mangaupdates_id=body.mangaupdates_id
+            session, opts, anilist_id=body.anilist_id, mangaupdates_id=body.mangaupdates_id,
+            mangabaka_id=body.mangabaka_id,
         )
     except SeriesExists:
         raise HTTPException(409, "Series already in library") from None

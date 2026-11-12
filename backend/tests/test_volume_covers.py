@@ -146,7 +146,7 @@ async def test_apply_is_off_by_default_and_looks_covers_up_once(tmp_path, monkey
 
     lookups = []
 
-    async def lookup(anilist_id, mangaupdates_id):
+    async def lookup(anilist_id, mangaupdates_id, mangabaka_id=None):
         lookups.append(anilist_id)
         return tasks.ComicExtras(mangabaka_id=7, writers=["W"])
 
@@ -170,7 +170,7 @@ async def test_apply_is_off_by_default_and_looks_covers_up_once(tmp_path, monkey
 async def test_covers_without_mangabaka_metadata_store_only_the_covers(monkeypatch, settings):
     settings["mangabaka_metadata"] = "false"
 
-    async def lookup(*_):
+    async def lookup(*_, **__):
         return tasks.ComicExtras(mangabaka_id=7, writers=["W"], tags=["T"])
 
     async def english_volume_covers(mangabaka_id):
