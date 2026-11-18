@@ -26,6 +26,18 @@ def media(identifier, title, **extra):
     }
 
 
+@pytest.mark.parametrize("adult_content", [True, False])
+async def test_release_query_omits_adult_filter_when_adult_content_is_allowed(adult_content, monkeypatch):
+    query = AsyncMock(return_value={"Page": {"media": []}})
+    monkeypatch.setattr(discovery.anilist, "_query", query)
+    await discovery.anilist.new_releases(20261031, 20261201, adult_content, 1)
+    variables = query.await_args.args[1]
+    if adult_content:
+        assert "includeAdult" not in variables
+    else:
+        assert variables["includeAdult"] is False
+
+
 async def test_new_releases_skip_owned_titles_and_use_complete_dates(session, monkeypatch):
     session.add(Series(title="Local Title", sort_title="local title", alt_titles="Official Title",
                        mangaupdates_id=10))

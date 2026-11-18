@@ -168,10 +168,12 @@ class AniListProvider(MetadataProvider):
     async def new_releases(
         self, after: int, before: int, adult_content: bool, page: int
     ) -> tuple[list[dict], bool]:
-        data = await self._query(RELEASES_QUERY, {
-            "after": after, "before": before, "includeAdult": None if adult_content else False,
-            "page": page,
-        })
+        variables = {"after": after, "before": before, "page": page}
+        # AniList treats an explicit null as a filter. Leave the argument
+        # unset when both adult and non-adult releases are allowed.
+        if not adult_content:
+            variables["includeAdult"] = False
+        data = await self._query(RELEASES_QUERY, variables)
         result = data["Page"]
         return result.get("media") or [], bool((result.get("pageInfo") or {}).get("hasNextPage"))
 
