@@ -42,7 +42,11 @@ synonyms
 coverImage { large }
 """
 
-_DISCOVERY_FIELDS = _NODE_FIELDS + "isAdult"
+_DISCOVERY_FIELDS = _NODE_FIELDS + """
+isAdult
+description(asHtml: false)
+genres
+"""
 
 RELEASES_QUERY = f"""
 query ($after: FuzzyDateInt, $before: FuzzyDateInt, $includeAdult: Boolean, $page: Int) {{
@@ -57,11 +61,12 @@ query ($after: FuzzyDateInt, $before: FuzzyDateInt, $includeAdult: Boolean, $pag
 """
 
 DISCOVERY_RECOMMENDATIONS_QUERY = f"""
-query ($ids: [Int]) {{
-  Page(perPage: 4) {{
+query ($ids: [Int], $page: Int) {{
+  Page(perPage: 8) {{
     media(id_in: $ids, type: MANGA) {{
       id
-      recommendations(sort: RATING_DESC, perPage: 20) {{
+      recommendations(sort: RATING_DESC, page: $page, perPage: 25) {{
+        pageInfo {{ hasNextPage }}
         nodes {{ rating mediaRecommendation {{ {_DISCOVERY_FIELDS} }} }}
       }}
     }}
@@ -177,13 +182,19 @@ class AniListProvider(MetadataProvider):
         result = data["Page"]
         return result.get("media") or [], bool((result.get("pageInfo") or {}).get("hasNextPage"))
 
-    async def discovery_recommendations(self, ids: list[int]) -> dict[int, list[dict]]:
-        data = await self._query(DISCOVERY_RECOMMENDATIONS_QUERY, {"ids": ids})
-        return {
-            media["id"]: (media.get("recommendations") or {}).get("nodes") or []
+    async def discovery_recommendations(
+        self, ids: list[int], page: int,
+    ) -> tuple[dict[int, list[dict]], bool]:
+        data = await self._query(DISCOVERY_RECOMMENDATIONS_QUERY, {"ids": ids, "page": page})
+        by_id = {
+            media["id"]: media.get("recommendations") or {}
             for media in (data["Page"].get("media") or [])
             if media
         }
+        return (
+            {seed_id: block.get("nodes") or [] for seed_id, block in by_id.items()},
+            any((block.get("pageInfo") or {}).get("hasNextPage") for block in by_id.values()),
+        )
 
     async def _query_explained(self, query: str, variables: dict) -> dict:
         """_query, but an error answer (AniList sends "Private User" and

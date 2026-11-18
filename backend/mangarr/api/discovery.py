@@ -18,8 +18,10 @@ from ..util import normalize_title
 
 router = APIRouter(prefix="/discovery", tags=["discovery"])
 
-RESULT_LIMIT = 12
-SEED_LIMIT = 4
+RESULT_LIMIT = 60
+CATALOG_PAGE_LIMIT = 3
+SEED_LIMIT = 8
+SEED_LOOKUP_LIMIT = 4
 UPSTREAM_ERRORS = (httpx.HTTPError, RuntimeError, TimeoutError, ValueError, KeyError, TypeError)
 
 
@@ -30,6 +32,10 @@ class DiscoveryTitle(BaseModel):
     english_title: str
     alt_titles: list[str]
     cover_url: str
+    year: int | None = None
+    status: str
+    genres: list[str]
+    description: str
     release_date: date | None = None
     read_title: str | None = None
 
@@ -55,7 +61,8 @@ def _candidate(
     return DiscoveryTitle(
         provider_id=meta.provider_id, title=meta.title,
         english_title=titles.get("english") or "", alt_titles=meta.alt_titles,
-        cover_url=meta.cover_url,
+        cover_url=meta.cover_url, year=meta.year, status=meta.status,
+        genres=meta.genres, description=meta.description,
     )
 
 
@@ -82,7 +89,7 @@ async def releases(session: AsyncSession = Depends(get_session)):
     items: dict[str, DiscoveryTitle] = {}
     try:
         async with asyncio.timeout(20):
-            for page in (1, 2):
+            for page in range(1, CATALOG_PAGE_LIMIT + 1):
                 nodes, more = await anilist.new_releases(after, before, adult, page)
                 for media in nodes:
                     if not media or media.get("status") == "CANCELLED":
@@ -118,7 +125,7 @@ async def _reading_seeds(
 
     # Search only a few unmatched titles and require a unique exact alias.
     # Kavita's username, key and reading sessions stay on the local server.
-    for key, name in unresolved[:SEED_LIMIT]:
+    for key, name in unresolved[:SEED_LOOKUP_LIMIT]:
         results = await anilist.search(name, limit=8)
         ids = {
             int(item.provider_id) for item in results
@@ -154,27 +161,31 @@ async def recommendations(session: AsyncSession = Depends(get_session)):
 
     index = await LibraryIndex.load(session)
     adult = values.get("adult_content") == "true"
+    candidates: dict[str, tuple[int, DiscoveryTitle]] = {}
     try:
         async with asyncio.timeout(25):
             seeds = await _reading_seeds(names, index, session)
             if not seeds:
                 return DiscoveryRecommendations(items=[], state="no_matches")
-            results = await anilist.discovery_recommendations(list(seeds))
-        candidates: dict[str, tuple[int, DiscoveryTitle]] = {}
-        for seed_id, seed_title in seeds.items():
-            for row in results.get(seed_id, ()):
-                rating = row.get("rating") if row else None
-                media = (row.get("mediaRecommendation") or {}) if row else {}
-                if not rating or rating <= 0 or media.get("id") in seeds:
-                    continue
-                item = _candidate(media, index, adult)
-                if not item or names.keys() & title_keys([item.title, *item.alt_titles]):
-                    continue
-                existing = candidates.get(item.provider_id)
-                if existing is None or rating > existing[0]:
-                    item.read_title = seed_title
-                    candidates[item.provider_id] = rating, item
+            for page in range(1, CATALOG_PAGE_LIMIT + 1):
+                results, more = await anilist.discovery_recommendations(list(seeds), page)
+                for seed_id, seed_title in seeds.items():
+                    for row in results.get(seed_id, ()):
+                        rating = row.get("rating") if row else None
+                        media = (row.get("mediaRecommendation") or {}) if row else {}
+                        if not rating or rating <= 0 or media.get("id") in seeds:
+                            continue
+                        item = _candidate(media, index, adult)
+                        if not item or names.keys() & title_keys([item.title, *item.alt_titles]):
+                            continue
+                        existing = candidates.get(item.provider_id)
+                        if existing is None or rating > existing[0]:
+                            item.read_title = seed_title
+                            candidates[item.provider_id] = rating, item
+                if len(candidates) >= RESULT_LIMIT or not more:
+                    break
     except UPSTREAM_ERRORS:
-        raise HTTPException(502, "AniList recommendations are temporarily unavailable.") from None
+        if not candidates:
+            raise HTTPException(502, "AniList recommendations are temporarily unavailable.") from None
     ranked = sorted(candidates.values(), key=lambda result: result[0], reverse=True)
     return DiscoveryRecommendations(items=[item for _, item in ranked[:RESULT_LIMIT]])

@@ -4,10 +4,15 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { RootFolder } from "../api/types";
 import { AddSeriesModal, type AddTarget } from "../components/AddSeriesModal";
-import { ErrorNotice, Modal, Spinner, Toolbar } from "../components/common";
+import { ErrorNotice, Modal, Spinner, Toolbar, statusPill } from "../components/common";
+import { sanitizeDescription } from "../sanitize";
 
 type DiscoveryTitle = AddTarget & {
   cover_url: string;
+  year: number | null;
+  status: string;
+  genres: string[];
+  description: string;
   release_date: string | null;
   read_title: string | null;
 };
@@ -20,6 +25,48 @@ type Recommendations = {
 const releaseDate = new Intl.DateTimeFormat(undefined, {
   month: "short", day: "numeric", timeZone: "UTC",
 });
+const PAGE_SIZE = 12;
+
+function DiscoveryRow({ item, onAdd }: { item: DiscoveryTitle; onAdd: (item: DiscoveryTitle) => void }) {
+  const detailsUrl = `https://anilist.co/manga/${encodeURIComponent(item.provider_id)}/`;
+  return (
+    <li className="discovery-row">
+      {item.cover_url
+        ? <img className="discovery-cover" src={item.cover_url} alt="" loading="lazy" />
+        : <span className="discovery-cover" aria-hidden="true" />}
+      <div className="discovery-details">
+        <h3>
+          <a className="discovery-title" href={detailsUrl} target="_blank" rel="noopener noreferrer"
+            aria-label={`${item.title} details on AniList (opens in a new tab)`}>
+            {item.title}
+          </a>
+          {item.year && <span className="dim"> ({item.year})</span>}
+        </h3>
+        {item.alt_titles[0] && <p className="dim">{item.alt_titles[0]}</p>}
+        <div className="discovery-meta">
+          {item.status !== "unknown" && (
+            <span className={`pill ${statusPill[item.status] ?? "gray"}`}>{item.status.replaceAll("_", " ")}</span>
+          )}
+          {item.genres.slice(0, 4).map((genre) => <span className="tag" key={genre}>{genre}</span>)}
+          {item.release_date && (
+            <time className="dim" dateTime={item.release_date}>
+              {releaseDate.format(new Date(item.release_date))}
+            </time>
+          )}
+        </div>
+        {item.description && (
+          <div className="discovery-description dim"
+            dangerouslySetInnerHTML={{ __html: sanitizeDescription(item.description) }} />
+        )}
+        {item.read_title && <p className="dim">Because you read {item.read_title}</p>}
+      </div>
+      <button type="button" className="btn primary discovery-add"
+        aria-label={`Add ${item.title}`} onClick={() => onAdd(item)}>
+        + Add
+      </button>
+    </li>
+  );
+}
 
 function DiscoveryPanel({
   id, title, description, items = [], pending, error, retry, empty, onAdd,
@@ -34,6 +81,8 @@ function DiscoveryPanel({
   empty: ReactNode;
   onAdd: (item: DiscoveryTitle) => void;
 }) {
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const listId = `${id}-titles`;
   return (
     <section className="discovery-panel" aria-labelledby={id}>
       <header className="discovery-panel-header">
@@ -44,28 +93,22 @@ function DiscoveryPanel({
       {pending && <Spinner />}
       {!pending && !error && items.length === 0 && <p className="discovery-empty dim">{empty}</p>}
       {items.length > 0 && (
-        <ul className="discovery-list">
-          {items.map((item) => (
-            <li key={item.provider_id} className="discovery-row">
-              {item.cover_url
-                ? <img className="discovery-cover" src={item.cover_url} alt="" loading="lazy" />
-                : <span className="discovery-cover" aria-hidden="true" />}
-              <div className="discovery-details">
-                <h3>{item.title}</h3>
-                {item.release_date && (
-                  <time className="dim" dateTime={item.release_date}>
-                    {releaseDate.format(new Date(item.release_date))}
-                  </time>
-                )}
-                {item.read_title && <p className="dim">Because you read {item.read_title}</p>}
-              </div>
-              <button type="button" className="btn primary discovery-add"
-                aria-label={`Add ${item.title}`} onClick={() => onAdd(item)}>
-                + Add
-              </button>
-            </li>
+        <ul className="discovery-list" id={listId}>
+          {items.slice(0, visibleCount).map((item) => (
+            <DiscoveryRow key={item.provider_id} item={item} onAdd={onAdd} />
           ))}
         </ul>
+      )}
+      {items.length > PAGE_SIZE && (
+        <footer className="discovery-pagination">
+          <span className="dim" role="status">Showing {Math.min(visibleCount, items.length)} of {items.length}</span>
+          {visibleCount < items.length && (
+            <button type="button" className="btn" aria-controls={listId}
+              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
+              Show more
+            </button>
+          )}
+        </footer>
       )}
     </section>
   );

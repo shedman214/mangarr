@@ -49,14 +49,22 @@ async def test_new_releases_skip_owned_titles_and_use_complete_dates(session, mo
     provider = AsyncMock(side_effect=[
         ([media(1, "Official Title", startDate=full_date),
           media(2, "Unscheduled", startDate={"year": today.year}),
-          media(3, "Mature", startDate=full_date, isAdult=True)], True),
-        ([media(4, "New Series", startDate=full_date),
-          media(4, "New Series", startDate=full_date)], False),
+          media(3, "Mature", startDate=full_date, isAdult=True),
+          *(media(i, f"Debut {i}", startDate=full_date) for i in range(10, 23))], True),
+        ([media(4, "New Series", startDate=full_date, description="A new adventure",
+                status="RELEASING", genres=["Adventure"]),
+          media(4, "New Series", startDate=full_date),
+          media(5, "Official Title", startDate=full_date)], False),
     ])
     monkeypatch.setattr(discovery.anilist, "new_releases", provider)
 
     result = await discovery.releases(session)
-    assert [(item.provider_id, item.release_date) for item in result] == [("4", today)]
+    assert [(item.provider_id, item.release_date) for item in result] == [
+        *((str(i), today) for i in range(10, 23)), ("4", today),
+    ]
+    assert (result[-1].year, result[-1].status, result[-1].genres, result[-1].description) == (
+        today.year, "releasing", ["Adventure"], "A new adventure",
+    )
     provider.assert_any_await(discovery._fuzzy_date(first - timedelta(days=1)),
                              discovery._fuzzy_date(end), False, 2)
 
@@ -78,21 +86,25 @@ async def test_recommendations_use_kavita_reads_and_filter_library(session, monk
     def scored(node, rating=10):
         return {"rating": rating, "mediaRecommendation": node}
 
-    provider = AsyncMock(return_value={
+    provider = AsyncMock(side_effect=[({
         10: [scored(media(20, "Elsewhere", synonyms=["Already owned"])),
              scored(media(11, "Second read")), scored(media(30, "Worth Trying"))],
         11: [scored(media(30, "Worth Trying"), rating=50),
              scored(media(41, "Prose", format="NOVEL")),
              scored(media(42, "Animation", type="ANIME")),
              scored(media(43, "Mature", isAdult=True))],
-    })
+    }, True), ({
+        11: [*(scored(media(i, f"Recommendation {i}")) for i in range(50, 63)),
+             scored(media(64, "Already owned"))],
+    }, False)])
     monkeypatch.setattr(discovery.anilist, "discovery_recommendations", provider)
 
     result = await discovery.recommendations(session)
-    provider.assert_awaited_once_with([10, 11])
+    assert [invocation.args for invocation in provider.await_args_list] == [([10, 11], 1), ([10, 11], 2)]
     assert result.state == "ready"
     assert [(item.title, item.read_title) for item in result.items] == [
         ("Worth Trying", "Second read"),
+        *((f"Recommendation {i}", "Second read") for i in range(50, 63)),
     ]
 
 
