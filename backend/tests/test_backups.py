@@ -1,4 +1,5 @@
 import hashlib
+from contextlib import closing
 import os
 import json
 import sqlite3
@@ -99,7 +100,8 @@ def old_layout(root):
     """A database from before a release added a column and a table."""
     db = library(root)
     db.execute("ALTER TABLE series DROP COLUMN metadata_refreshed_at")  # a column db.py adds on upgrade
-    table = next(t.name for t in reversed(Base.metadata.sorted_tables) if t.name not in {"settings", "series"})
+    # a table a later release added (every Mangarr database has the core ones)
+    table = next(t.name for t in reversed(Base.metadata.sorted_tables) if t.name not in backups.CORE_LAYOUT)
     db.execute(f'DROP TABLE "{table}"')
     db.commit()
     return db, table
@@ -220,3 +222,29 @@ def test_same_version_backup_still_needs_the_full_schema(tmp_path):
     from mangarr import __version__
     with pytest.raises(ValueError, match="schema is incompatible"):
         backups.stage(tmp_path, _rewritten(tmp_path, result, __version__, drop_column="upgrade_cutoff"))
+
+
+@pytest.mark.parametrize("version", ["0.1.1", None])
+def test_older_or_pre_migration_backup_must_still_be_a_mangarr_library(tmp_path, version):
+    db = library(tmp_path)
+    result = backups.create(tmp_path, reason="pre-migration" if version is None else "manual")
+    db.close()
+    with zipfile.ZipFile(backups.archive_path(tmp_path, result["id"])) as z:
+        entries = {n: z.read(n) for n in z.namelist()}
+    unrelated = tmp_path / "unrelated.db"
+    with closing(sqlite3.connect(unrelated)) as connection:
+        connection.execute("CREATE TABLE dummy (id INTEGER)")
+        connection.commit()
+    entries["mangarr.db"] = unrelated.read_bytes()
+    manifest = json.loads(entries["manifest.json"])
+    if version:
+        manifest["version"] = version
+    manifest["database_sha256"] = hashlib.sha256(entries["mangarr.db"]).hexdigest()
+    entries["manifest.json"] = json.dumps(manifest).encode()
+    upload = tmp_path / "upload.zip"
+    with zipfile.ZipFile(upload, "w") as z:
+        for name, value in entries.items():
+            z.writestr(name, value)
+    with pytest.raises(ValueError, match="not a Mangarr library"):
+        backups.stage(tmp_path, upload)
+    assert not backups.status(tmp_path)["pending"]

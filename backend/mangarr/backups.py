@@ -31,6 +31,20 @@ def archive_path(data_dir, token):
     return folder(data_dir) / f"{token}.zip"
 
 
+# Tables and columns every Mangarr database has had since the first release. A backup from an
+# earlier version (or a pre-migration copy) may lack newer columns, which startup adds, but it
+# must still be a Mangarr library: an unrelated database would otherwise replace the live one.
+CORE_LAYOUT = {
+    "root_folders": {"id", "path"},
+    "series": {"id", "title", "status"},
+    "series_source_links": {"id", "series_id"},
+    "chapters": {"id", "series_id", "number"},
+    "downloads": {"id", "series_id", "status"},
+    "history": {"id", "series_id"},
+    "settings": {"key", "value"},
+}
+
+
 def _version_key(value):
     """A version as comparable numbers ("2026.11.18" -> (2026, 11, 18)); None when it is not one."""
     parts = str(value or "").split(".")
@@ -57,7 +71,11 @@ def _validate_db(path, check_schema=True):
             raise ValueError("Backup database contains unsupported triggers or views")
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError("Backup database failed its integrity check")
-        if not check_schema:  # pre-migration snapshots hold the OLD layout by definition
+        if not check_schema:  # pre-migration snapshots and older versions hold an OLD layout
+            for table, needed in CORE_LAYOUT.items():
+                columns = {r[1] for r in db.execute(f'PRAGMA table_info("{table}")')}
+                if not needed <= columns:
+                    raise ValueError("Backup database is not a Mangarr library")
             return
         # Match all mapped columns; restoring an incompatible schema is unsafe.
         for table in Base.metadata.sorted_tables:
