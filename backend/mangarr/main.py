@@ -13,6 +13,7 @@ from .api import (
     backups,
     apikeys,
     calendar,
+    discovery,
     import_lists,
     library,
     library_import,
@@ -65,6 +66,7 @@ api.include_router(series.router)
 api.include_router(library_import.router)
 api.include_router(library.router)
 api.include_router(calendar.router)
+api.include_router(discovery.router)
 api.include_router(import_lists.router)
 api.include_router(search.router)
 api.include_router(queue.router)

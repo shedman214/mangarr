@@ -70,6 +70,27 @@ async def test_bad_api_key_raises():
         await kavita.test_connection(BASE, "nope")
 
 
+@pytest.mark.parametrize("history", ["available", "missing", "empty"])
+@respx.mock
+async def test_recently_read_titles_use_reading_history_or_on_deck(history):
+    mock_auth()
+    rows = [{"seriesName": "Recent read"}] if history == "available" else []
+    history_route = respx.get(f"{BASE}/api/Stats/reading-history").mock(
+        return_value=Response(404) if history == "missing" else Response(200, json=rows)
+    )
+    if history != "available":
+        respx.post(f"{BASE}/api/Series/on-deck").mock(
+            return_value=Response(200, json=[{"name": "Recent read"}])
+        )
+    client = kavita.KavitaClient(BASE, "key")
+    try:
+        assert await client.recently_read_titles() == ["Recent read"]
+    finally:
+        await client.close()
+    assert history_route.called
+    assert history_route.calls[0].request.headers["authorization"] == "Bearer jwt-token"
+
+
 @respx.mock
 async def test_non_kavita_host_raises_readable_error():
     respx.post(f"{BASE}/api/Plugin/authenticate").mock(

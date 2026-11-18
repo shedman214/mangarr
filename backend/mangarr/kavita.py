@@ -138,6 +138,38 @@ class KavitaClient:
             if row.get("id") is not None
         ]
 
+    async def recently_read_titles(self) -> list[str]:
+        """Read titles for the account that owns the configured plugin key."""
+        params = {"pageNumber": 1, "pageSize": 40}
+        # On Deck also contains saved progress when reading history is empty.
+        endpoints = (
+            ("GET", "/api/Stats/reading-history", "seriesName"),
+            ("POST", "/api/Series/on-deck", "name"),
+        )
+        for method, path, name_field in endpoints:
+            try:
+                resp = await self._request(method, path, params=params)
+            except KavitaError as exc:
+                cause = exc.__cause__
+                if (method == "GET" and isinstance(cause, httpx.HTTPStatusError)
+                        and cause.response.status_code in (404, 405)):
+                    continue
+                raise
+            try:
+                rows = resp.json()
+            except ValueError as exc:
+                raise KavitaError("Kavita returned unreadable reading activity") from exc
+            if not isinstance(rows, list):
+                raise KavitaError("Kavita returned unexpected reading activity")
+            titles = [
+                row[name_field] for row in rows
+                if isinstance(row, dict) and isinstance(row.get(name_field), str)
+                and row[name_field].strip()
+            ]
+            if titles:
+                return titles
+        return []
+
     async def scan_library(self, library_id: int, force: bool = False) -> None:
         await self._request(
             "POST", "/api/Library/scan",

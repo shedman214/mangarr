@@ -36,10 +36,37 @@ query ($id: Int) {{
 
 _NODE_FIELDS = """
 id type format status
-startDate { year }
+startDate { year month day }
 title { romaji english native }
 synonyms
 coverImage { large }
+"""
+
+_DISCOVERY_FIELDS = _NODE_FIELDS + "isAdult"
+
+RELEASES_QUERY = f"""
+query ($after: FuzzyDateInt, $before: FuzzyDateInt, $includeAdult: Boolean, $page: Int) {{
+  Page(page: $page, perPage: 50) {{
+    pageInfo {{ hasNextPage }}
+    media(type: MANGA, format_not: NOVEL, isAdult: $includeAdult,
+          startDate_greater: $after, startDate_lesser: $before, sort: [POPULARITY_DESC, ID]) {{
+      {_DISCOVERY_FIELDS}
+    }}
+  }}
+}}
+"""
+
+DISCOVERY_RECOMMENDATIONS_QUERY = f"""
+query ($ids: [Int]) {{
+  Page(perPage: 4) {{
+    media(id_in: $ids, type: MANGA) {{
+      id
+      recommendations(sort: RATING_DESC, perPage: 20) {{
+        nodes {{ rating mediaRecommendation {{ {_DISCOVERY_FIELDS} }} }}
+      }}
+    }}
+  }}
+}}
 """
 
 RELATED_QUERY = f"""
@@ -137,6 +164,24 @@ class AniListProvider(MetadataProvider):
         edges = ((media.get("relations") or {}).get("edges")) or []
         recs = ((media.get("recommendations") or {}).get("nodes")) or []
         return edges, recs
+
+    async def new_releases(
+        self, after: int, before: int, adult_content: bool, page: int
+    ) -> tuple[list[dict], bool]:
+        data = await self._query(RELEASES_QUERY, {
+            "after": after, "before": before, "includeAdult": None if adult_content else False,
+            "page": page,
+        })
+        result = data["Page"]
+        return result.get("media") or [], bool((result.get("pageInfo") or {}).get("hasNextPage"))
+
+    async def discovery_recommendations(self, ids: list[int]) -> dict[int, list[dict]]:
+        data = await self._query(DISCOVERY_RECOMMENDATIONS_QUERY, {"ids": ids})
+        return {
+            media["id"]: (media.get("recommendations") or {}).get("nodes") or []
+            for media in (data["Page"].get("media") or [])
+            if media
+        }
 
     async def _query_explained(self, query: str, variables: dict) -> dict:
         """_query, but an error answer (AniList sends "Private User" and

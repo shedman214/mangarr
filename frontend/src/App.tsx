@@ -5,6 +5,7 @@ import Sidebar from "./components/Sidebar";
 import Library from "./pages/Library";
 import AddSeries from "./pages/AddSeries";
 import Calendar from "./pages/Calendar";
+import Discovery from "./pages/Discovery";
 import ImportLists from "./pages/ImportLists";
 import LibraryImport from "./pages/LibraryImport";
 import SeriesDetail from "./pages/SeriesDetail";
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/add/import" element={<LibraryImport />} />
           <Route path="/add/lists" element={<ImportLists />} />
           <Route path="/calendar" element={<Calendar />} />
+          <Route path="/discovery" element={<Discovery />} />
           <Route path="/series/:id" element={<SeriesDetail />} />
           <Route path="/activity" element={<Activity />} />
           <Route path="/wanted" element={<Wanted />} />

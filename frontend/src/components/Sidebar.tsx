@@ -9,6 +9,7 @@ const items = [
   { to: "/", label: "Library", icon: "▦" },
   { to: "/add", label: "Add New", icon: "+" },
   { to: "/calendar", label: "Calendar", icon: "◷" },
+  { to: "/discovery", label: "Discovery", icon: "✦" },
   { to: "/activity", label: "Activity", icon: "⇅" },
   { to: "/wanted", label: "Wanted", icon: "!" },
   { to: "/settings", label: "Settings", icon: "⚙" },

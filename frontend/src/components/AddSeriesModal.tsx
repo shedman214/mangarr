@@ -79,6 +79,7 @@ export function AddSeriesModal({
       queryClient.invalidateQueries({ queryKey: ["series"] });
       // other series' related titles may now be in the library
       queryClient.invalidateQueries({ queryKey: ["related"] });
+      queryClient.invalidateQueries({ queryKey: ["discovery"] });
       navigate(`/series/${series.id}`);
     },
   });

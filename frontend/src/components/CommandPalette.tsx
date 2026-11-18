@@ -11,6 +11,7 @@ const PAGES = [
   { to: "/add/import", label: "Library import", keywords: "existing folders bulk" },
   { to: "/add/lists", label: "Import lists", keywords: "anilist myanimelist mal mangadex mangaupdates" },
   { to: "/calendar", label: "Calendar", keywords: "upcoming releases schedule" },
+  { to: "/discovery", label: "Discovery", keywords: "new manga releases kavita recommendations" },
   { to: "/activity", label: "Activity", keywords: "queue history downloads" },
   { to: "/wanted", label: "Wanted", keywords: "missing chapters" },
   { to: "/settings", label: "Settings", keywords: "sources kavita qbittorrent root folders" },
