@@ -24,11 +24,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # One exact commit for everything below: the release tag's commit, or the pushed commit.
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.sha }}
+      - id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   verify:
+    needs: resolve
     uses: ./.github/workflows/tests.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
 
   image:
-    needs: verify
+    needs: [resolve, verify]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -36,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.ref }}
+          ref: ${{ needs.resolve.outputs.sha }}
       - uses: docker/setup-buildx-action@v3
       - name: Image tags
         id: tags
