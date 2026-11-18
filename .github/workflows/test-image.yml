@@ -1,8 +1,13 @@
 name: Build and publish test image
 
+# Pushes to main publish :test (what the Unraid template uses) and :sha-<commit>.
+# A published GitHub Release publishes :<release tag> (e.g. :v2026.11.18) and :sha-<commit>
+# for the released commit, and never moves :test.
 on:
   push:
     branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -32,6 +37,17 @@ jobs:
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "pinned=$image:sha-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+(\.[0-9]+){1,3}$ ]]; then
+              echo "Release tag '$RELEASE_TAG' is not a version tag (vYYYY.MM.DD)" >&2
+              exit 1
+            fi
+            echo "moving=$image:$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "moving=$image:test" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
       - name: Build test image
         uses: docker/build-push-action@v6
         with:
@@ -40,7 +56,7 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: |
-            ${{ steps.tags.outputs.image }}:test
+            ${{ steps.tags.outputs.moving }}
             ${{ steps.tags.outputs.pinned }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
@@ -76,6 +92,6 @@ jobs:
       - name: Publish verified test image
         run: |
           docker push "${{ steps.tags.outputs.pinned }}"
-          docker push "${{ steps.tags.outputs.image }}:test"
-          echo 'Test image: `${{ steps.tags.outputs.pinned }}`' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Moving tag: `${{ steps.tags.outputs.image }}:test`' >> "$GITHUB_STEP_SUMMARY"
+          docker push "${{ steps.tags.outputs.moving }}"
+          echo 'Pinned image: `${{ steps.tags.outputs.pinned }}`' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Tag: `${{ steps.tags.outputs.moving }}`' >> "$GITHUB_STEP_SUMMARY"

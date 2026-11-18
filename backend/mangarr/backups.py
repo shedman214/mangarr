@@ -31,6 +31,25 @@ def archive_path(data_dir, token):
     return folder(data_dir) / f"{token}.zip"
 
 
+def _version_key(value):
+    """A version as comparable numbers ("2026.11.18" -> (2026, 11, 18)); None when it is not one."""
+    parts = str(value or "").split(".")
+    if not 1 <= len(parts) <= 4 or not all(p.isdigit() and len(p) <= 6 for p in parts):
+        return None
+    return tuple(int(p) for p in parts)
+
+
+def _restorable(version):
+    """'same' for this version's backups, 'older' for an earlier release's (startup migrates the
+    database forward, as it does for pre-migration copies), None for newer or unreadable ones."""
+    if version == __version__:
+        return "same"
+    backup, current = _version_key(version), _version_key(__version__)
+    if backup is not None and current is not None and backup < current:
+        return "older"
+    return None
+
+
 def _validate_db(path, check_schema=True):
     from .models import Base
     with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as db:
@@ -140,8 +159,9 @@ def validate(archive, destination):
         if z.getinfo("manifest.json").file_size > 4096 or ("api_key" in names and z.getinfo("api_key").file_size > 4096):
             raise ValueError("Invalid backup metadata")
         manifest = json.loads(z.read("manifest.json"))
-        if not isinstance(manifest, dict) or manifest.get("format") != 1 or manifest.get("version") != __version__:
-            raise ValueError("Restore requires a backup from this Mangarr version")
+        kind = _restorable(manifest.get("version")) if isinstance(manifest, dict) else None
+        if not isinstance(manifest, dict) or manifest.get("format") != 1 or kind is None:
+            raise ValueError("Restore requires a backup from this or an earlier Mangarr version")
         db = Path(destination) / "mangarr.db"
         with z.open("mangarr.db") as src, db.open("wb") as dest:
             shutil.copyfileobj(src, dest)
@@ -149,8 +169,9 @@ def validate(archive, destination):
             digest = hashlib.file_digest(handle, "sha256").hexdigest()
         if digest != manifest.get("database_sha256"):
             raise ValueError("Backup checksum does not match")
-        # A pre-migration copy holds the previous layout; startup migrates it forward after restoring.
-        _validate_db(db, check_schema=manifest.get("reason") != "pre-migration")
+        # A pre-migration copy, or a backup from an earlier version, holds an older layout; startup
+        # migrates it forward after restoring.
+        _validate_db(db, check_schema=manifest.get("reason") != "pre-migration" and kind == "same")
         if "api_key" in names:
             key = z.read("api_key").decode().strip()
             if not re.fullmatch(r"[a-zA-Z0-9_-]{16,256}", key):

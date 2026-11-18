@@ -160,3 +160,63 @@ def test_premigration_backup_failure_is_raised(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         backups.pre_migration_backup(tmp_path)
     assert not list(backups.folder(tmp_path).glob("*.zip"))
+
+
+def _rewritten(tmp_path, result, version, drop_column=None):
+    """The backup's archive with another manifest version (and optionally an older database layout)."""
+    with zipfile.ZipFile(backups.archive_path(tmp_path, result["id"])) as z:
+        entries = {n: z.read(n) for n in z.namelist()}
+    if drop_column:
+        old = tmp_path / "old.db"
+        old.write_bytes(entries["mangarr.db"])
+        connection = sqlite3.connect(old)
+        connection.execute("PRAGMA journal_mode=DELETE")  # keep the change in the file itself, not a WAL
+        connection.execute(f"ALTER TABLE series DROP COLUMN {drop_column}")
+        connection.commit()
+        connection.close()
+        entries["mangarr.db"] = old.read_bytes()
+    manifest = json.loads(entries["manifest.json"])
+    manifest["version"] = version
+    manifest["database_sha256"] = hashlib.sha256(entries["mangarr.db"]).hexdigest()
+    entries["manifest.json"] = json.dumps(manifest).encode()
+    upload = tmp_path / f"upload-{version}.zip"
+    with zipfile.ZipFile(upload, "w") as z:
+        for name, value in entries.items():
+            z.writestr(name, value)
+    return upload
+
+
+def test_version_keys_compare_numerically():
+    assert backups._version_key("2026.11.18") == (2026, 11, 18)
+    assert backups._version_key("0.1.1") < backups._version_key("2026.11.18")
+    for bad in ("", None, "wrong", "1.x", "1..2", "1.2.3.4.5"):
+        assert backups._version_key(bad) is None
+
+
+def test_backup_from_an_earlier_version_restores(tmp_path, monkeypatch):
+    # backups made before the version moved to 2026.11.18 say 0.1.1 and may lack newer columns
+    db = library(tmp_path)
+    result = backups.create(tmp_path)
+    db.close()
+    upload = _rewritten(tmp_path, result, "0.1.1", drop_column="upgrade_cutoff")
+    backups.stage(tmp_path, upload)
+    assert backups.status(tmp_path)["pending"]
+
+
+@pytest.mark.parametrize("version", ["9999.1.1", "wrong", ""])
+def test_backup_from_a_newer_or_unknown_version_is_refused(tmp_path, version):
+    db = library(tmp_path)
+    result = backups.create(tmp_path)
+    db.close()
+    with pytest.raises(ValueError, match="this or an earlier Mangarr version"):
+        backups.stage(tmp_path, _rewritten(tmp_path, result, version))
+    assert not backups.status(tmp_path)["pending"]
+
+
+def test_same_version_backup_still_needs_the_full_schema(tmp_path):
+    db = library(tmp_path)
+    result = backups.create(tmp_path)
+    db.close()
+    from mangarr import __version__
+    with pytest.raises(ValueError, match="schema is incompatible"):
+        backups.stage(tmp_path, _rewritten(tmp_path, result, __version__, drop_column="upgrade_cutoff"))
