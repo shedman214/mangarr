@@ -333,3 +333,13 @@ class ImportListEntry(Base):
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     import_list: Mapped[ImportList] = relationship(back_populates="entries")
+
+
+class DiscoveryHidden(Base):
+    """Titles hidden with Discovery's "Not interested": never suggested again until unhidden."""
+
+    __tablename__ = "discovery_hidden"
+
+    anilist_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    title: Mapped[str] = mapped_column(String, default="")
+    hidden_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

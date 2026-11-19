@@ -44,6 +44,7 @@ coverImage { large }
 
 _DISCOVERY_FIELDS = _NODE_FIELDS + """
 isAdult
+countryOfOrigin
 description(asHtml: false)
 genres
 """
@@ -62,7 +63,7 @@ query ($after: FuzzyDateInt, $before: FuzzyDateInt, $includeAdult: Boolean, $pag
 
 DISCOVERY_RECOMMENDATIONS_QUERY = f"""
 query ($ids: [Int], $page: Int) {{
-  Page(perPage: 8) {{
+  Page(perPage: 25) {{
     media(id_in: $ids, type: MANGA) {{
       id
       recommendations(sort: RATING_DESC, page: $page, perPage: 25) {{
