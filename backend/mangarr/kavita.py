@@ -47,6 +47,47 @@ DEBOUNCE_SECONDS = 15.0
 RESCAN_SECONDS = 300.0
 
 
+# Kavita's FilterV2 sort field for "last read" (SortField.ReadProgress)
+SORT_BY_LAST_READ = 7
+
+
+@dataclass
+class ReadEntry:
+    """One series from the reader's Kavita activity. Unknown values stay at 0."""
+
+    name: str
+    anilist_id: int | None = None
+    pages: int = 0
+    pages_read: int = 0
+    rating: float = 0.0  # Kavita's 0–5 stars; only meaningful when rated
+    rated: bool = False
+
+    @classmethod
+    def from_series(cls, row: dict) -> ReadEntry | None:
+        name = row.get("name") or row.get("seriesName")
+        if not isinstance(name, str) or not name.strip():
+            return None
+
+        def number(key):
+            value = row.get(key)
+            return value if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 0
+
+        anilist_id = number("aniListId")
+        return cls(
+            name=name.strip(), anilist_id=int(anilist_id) or None,
+            pages=int(number("pages")), pages_read=int(number("pagesRead")),
+            rating=float(number("userRating")), rated=row.get("hasUserRated") is True,
+        )
+
+    @property
+    def progress(self) -> float:
+        return min(1.0, self.pages_read / self.pages) if self.pages else 0.0
+
+    @property
+    def finished(self) -> bool:
+        return self.pages > 0 and self.pages_read >= self.pages
+
+
 class KavitaError(RuntimeError):
     pass
 
@@ -137,6 +178,27 @@ class KavitaClient:
             for row in rows
             if row.get("id") is not None
         ]
+
+    async def reading_profile(self, limit: int = 60) -> list[ReadEntry]:
+        """Series the key's account has read, most recently read first, with progress and
+        rating — including finished series, which On Deck leaves out."""
+        body = {"statements": [], "combination": 1, "limitTo": 0,
+                "sortOptions": {"sortField": SORT_BY_LAST_READ, "isAscending": False}}
+        resp = await self._request(
+            "POST", "/api/Series/all-v2", params={"pageNumber": 1, "pageSize": limit}, json=body,
+        )
+        try:
+            rows = resp.json()
+        except ValueError as exc:
+            raise KavitaError("Kavita returned an unreadable series list") from exc
+        if not isinstance(rows, list):
+            raise KavitaError("Kavita returned an unexpected series list")
+        entries = []
+        for row in rows:
+            entry = ReadEntry.from_series(row) if isinstance(row, dict) else None
+            if entry and entry.pages_read > 0:
+                entries.append(entry)
+        return entries
 
     async def recently_read_titles(self) -> list[str]:
         """Read titles for the account that owns the configured plugin key."""

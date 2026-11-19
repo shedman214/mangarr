@@ -44,6 +44,7 @@ coverImage { large }
 
 _DISCOVERY_FIELDS = _NODE_FIELDS + """
 isAdult
+countryOfOrigin
 description(asHtml: false)
 genres
 """

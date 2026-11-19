@@ -26,6 +26,7 @@ test("shows both panels and adds a recommendation through the series dialog", as
     release_date: null, read_title: "A recent read",
   };
   const calls = fakeApi((method, path) => {
+    if (path === "/discovery/hidden") return { body: [] };
     if (path === "/discovery/releases") return { body: [release] };
     if (path === "/discovery/recommendations") {
       return { body: { state: "ready", items: [recommendation] } };
@@ -58,6 +59,7 @@ test("shows both panels and adds a recommendation through the series dialog", as
 
 test("new releases work independently when Kavita needs to be connected", async () => {
   fakeApi((_, path) => {
+    if (path === "/discovery/hidden") return { body: [] };
     if (path === "/discovery/releases") return { body: [release] };
     if (path === "/discovery/recommendations") return { body: { state: "needs_kavita", items: [] } };
   });
@@ -75,6 +77,7 @@ test("shows manga details and reveals more titles in each panel independently", 
     release_date: null, read_title: "A recent read",
   }));
   const calls = fakeApi((_, path) => {
+    if (path === "/discovery/hidden") return { body: [] };
     if (path === "/discovery/releases") return { body: releases };
     if (path === "/discovery/recommendations") return { body: { state: "ready", items: recommendations } };
   });
@@ -101,5 +104,85 @@ test("shows manga details and reveals more titles in each panel independently", 
   expect(lastRelease.getByText("Adventure")).toBeVisible();
   expect(lastRelease.getByText("A story about exploring a new world.")).toBeVisible();
   expect(lastRelease.getByRole("button", { name: "Add Release 13" })).toBeVisible();
-  expect(calls).toHaveLength(2);
+  // Show more never refetches the lists (the hidden-titles count is fetched once on its own)
+  expect(calls.filter((call) => call.path !== "/discovery/hidden")).toHaveLength(2);
+});
+
+const pick = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
+  ...release, provider_id: id, title, release_date: null, read_title: "Btooom!", ...extra,
+});
+
+test("picks explain why: finished, percent read and rating", async () => {
+  fakeApi((_, path) => {
+    if (path === "/discovery/hidden") return { body: [] };
+    if (path === "/discovery/releases") return { body: [] };
+    if (path === "/discovery/recommendations") {
+      return { body: { state: "ready", items: [
+        pick("1", "Loved follow-up", { read_detail: "finished", read_rating: 5 }),
+        pick("2", "Halfway pick", { read_title: "Chainsaw Man", read_detail: "read 45%" }),
+        pick("3", "Plain pick", { read_title: "Old read" }),
+      ] } };
+    }
+  });
+  renderWithClient(<Discovery />);
+  expect(await screen.findByText("Because you finished Btooom! and rated it ★5")).toBeInTheDocument();
+  expect(screen.getByText("Because you read 45% of Chainsaw Man")).toBeInTheDocument();
+  expect(screen.getByText("Because you read Old read")).toBeInTheDocument();
+});
+
+test("filters by type, genre and status across both panels", async () => {
+  fakeApi((_, path) => {
+    if (path === "/discovery/hidden") return { body: [] };
+    if (path === "/discovery/releases") {
+      return { body: [
+        { ...release, provider_id: "10", title: "Korean release", country: "KR", genres: ["Action"] },
+        { ...release, provider_id: "11", title: "Japanese release", country: "JP", genres: ["Romance"] },
+      ] };
+    }
+    if (path === "/discovery/recommendations") {
+      return { body: { state: "ready", items: [
+        pick("12", "Korean pick", { country: "KR", status: "finished", genres: ["Action"] }),
+        pick("13", "One-shot pick", { format: "ONE_SHOT", genres: ["Action"] }),
+      ] } };
+    }
+  });
+  renderWithClient(<Discovery />);
+  await screen.findByText("Korean release");
+  await userEvent.selectOptions(screen.getByLabelText("Type"), "Manhwa");
+  expect(screen.getByText("Korean release")).toBeInTheDocument();
+  expect(screen.getByText("Korean pick")).toBeInTheDocument();
+  expect(screen.queryByText("Japanese release")).toBeNull();
+  expect(screen.queryByText("One-shot pick")).toBeNull();
+  await userEvent.selectOptions(screen.getByLabelText("Status"), "finished");
+  expect(screen.queryByText("Korean release")).toBeNull();
+  expect(screen.getByText("Nothing here matches these filters.")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+  expect(screen.getByText("Japanese release")).toBeInTheDocument();
+});
+
+test("Not interested hides a title, Undo brings it back, Manage can unhide", async () => {
+  let hidden: { provider_id: string; title: string; hidden_at: string }[] = [];
+  const calls = fakeApi((method, path, body) => {
+    if (path === "/discovery/hidden" && method === "GET") return { body: hidden };
+    if (path === "/discovery/hidden" && method === "POST") {
+      const b = body as { provider_id: string; title: string };
+      hidden = [{ ...b, hidden_at: "2026-11-19T00:00:00Z" }];
+      return { status: 204 };
+    }
+    if (path.startsWith("/discovery/hidden/") && method === "DELETE") { hidden = []; return { status: 204 }; }
+    if (path === "/discovery/releases") return { body: hidden.length ? [] : [release] };
+    if (path === "/discovery/recommendations") return { body: { state: "ready", items: [] } };
+  });
+  renderWithClient(<Discovery />);
+  await screen.findByText("New title");
+  await userEvent.click(screen.getByRole("button", { name: "Not interested in New title" }));
+  await waitFor(() => expect(screen.queryByRole("link", { name: /New title details/ })).toBeNull());
+  expect(calls.find((c) => c.method === "POST")?.body).toEqual({ provider_id: "100", title: "New title" });
+  expect(await screen.findByText(/won’t be suggested again/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "1 hidden · Manage" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByText("New title")).toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole("button", { name: "Unhide New title" }));
+  await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/discovery/hidden/100")).toBe(true));
+  expect(await screen.findByRole("link", { name: /New title details/ })).toBeInTheDocument();
 });
