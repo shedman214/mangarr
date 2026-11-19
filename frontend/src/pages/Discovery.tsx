@@ -113,7 +113,7 @@ function DiscoveryRow({ item, onAdd, onHide }: {
 }
 
 function DiscoveryPanel({
-  id, title, description, items = [], pending, error, retry, empty, onAdd, onHide, filtered,
+  id, title, description, items = [], pending, error, retry, empty, onAdd, onHide, isFiltered,
 }: {
   id: string;
   title: string;
@@ -125,7 +125,7 @@ function DiscoveryPanel({
   empty: ReactNode;
   onAdd: (item: DiscoveryTitle) => void;
   onHide: (item: DiscoveryTitle) => void;
-  filtered: boolean;
+  isFiltered: boolean;
 }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const listId = `${id}-titles`;
@@ -138,7 +138,7 @@ function DiscoveryPanel({
       <ErrorNotice error={error} retry={retry} />
       {pending && <Spinner />}
       {!pending && !error && items.length === 0 && (
-        <p className="discovery-empty dim">{filtered ? "Nothing here matches these filters." : empty}</p>
+        <p className="discovery-empty dim">{isFiltered ? "Nothing here matches these filters." : empty}</p>
       )}
       {items.length > 0 && (
         <ul className="discovery-list" id={listId}>
@@ -190,6 +190,9 @@ export default function Discovery() {
   const [adding, setAdding] = useState<DiscoveryTitle | null>(null);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [lastHidden, setLastHidden] = useState<DiscoveryTitle | null>(null);
+  // hidden here but maybe not yet in a server answer: a list response that was already on its
+  // way when the title was hidden must not bring it back
+  const [justHidden, setJustHidden] = useState<Set<string>>(() => new Set());
   const [managing, setManaging] = useState(false);
   const releases = useQuery({
     queryKey: ["discovery", "releases"],
@@ -223,6 +226,7 @@ export default function Discovery() {
     mutationFn: (item: DiscoveryTitle) =>
       api.post("/discovery/hidden", { provider_id: item.provider_id, title: item.title }),
     onSuccess: (_, item) => {
+      setJustHidden((ids) => new Set(ids).add(item.provider_id));
       removeFromLists(item.provider_id);
       setLastHidden(item);
       void queryClient.invalidateQueries({ queryKey: ["discovery", "hidden"] });
@@ -230,7 +234,8 @@ export default function Discovery() {
   });
   const unhide = useMutation({
     mutationFn: (providerId: string) => api.del(`/discovery/hidden/${encodeURIComponent(providerId)}`),
-    onSuccess: () => {
+    onSuccess: (_, providerId) => {
+      setJustHidden((ids) => { const next = new Set(ids); next.delete(providerId); return next; });
       setLastHidden(null);
       void queryClient.invalidateQueries({ queryKey: ["discovery"] });
     },
@@ -245,10 +250,12 @@ export default function Discovery() {
     () => [...new Set(all.map((item) => item.status).filter((status) => status !== "unknown"))].sort(),
     [all],
   );
-  const filtered = filters.type !== "" || filters.genre !== "" || filters.status !== "";
+  const isFiltered = filters.type !== "" || filters.genre !== "" || filters.status !== "";
   const filterKey = `${filters.type}|${filters.genre}|${filters.status}`;
-  const shownReleases = releases.data?.filter((item) => matches(item, filters));
-  const shownPicks = recommendations.data?.items.filter((item) => matches(item, filters));
+  const hiddenIds = new Set([...(hidden.data ?? []).map((row) => row.provider_id), ...justHidden]);
+  const visible = (item: DiscoveryTitle) => !hiddenIds.has(item.provider_id) && matches(item, filters);
+  const shownReleases = releases.data?.filter(visible);
+  const shownPicks = recommendations.data?.items.filter(visible);
   const hiddenCount = hidden.data?.length ?? 0;
 
   return (
@@ -262,8 +269,15 @@ export default function Discovery() {
             onChange={(genre) => setFilters((current) => ({ ...current, genre }))} />
           <FilterSelect label="Status" value={filters.status} options={statuses}
             onChange={(status) => setFilters((current) => ({ ...current, status }))} />
-          {filtered && (
+          {isFiltered && (
             <button type="button" className="btn" onClick={() => setFilters(NO_FILTERS)}>Clear filters</button>
+          )}
+          {hidden.isPending && <span className="dim discovery-manage">Loading hidden titles…</span>}
+          {hidden.error && (
+            <span className="discovery-manage discovery-hidden-error" role="alert">
+              Couldn’t load hidden titles.{" "}
+              <button type="button" className="btn" onClick={() => void hidden.refetch()}>Retry</button>
+            </span>
           )}
           {hiddenCount > 0 && (
             <button type="button" className="btn discovery-manage" onClick={() => setManaging(true)}>
@@ -277,13 +291,13 @@ export default function Discovery() {
             description="Manga debuting this month"
             items={shownReleases} pending={releases.isPending} error={releases.error}
             retry={() => void releases.refetch()} empty="No new releases outside your library found this month."
-            onAdd={setAdding} onHide={(item) => hide.mutate(item)} filtered={filtered} />
+            onAdd={setAdding} onHide={(item) => hide.mutate(item)} isFiltered={isFiltered} />
           <DiscoveryPanel key={`picks-${filterKey}`} id="picked-for-you" title="Picked for you"
             description="Based on what you read in Kavita"
             items={shownPicks} pending={recommendations.isPending} error={recommendations.error}
             retry={() => void recommendations.refetch()}
             empty={recommendationEmpty[recommendations.data?.state ?? "ready"]}
-            onAdd={setAdding} onHide={(item) => hide.mutate(item)} filtered={filtered} />
+            onAdd={setAdding} onHide={(item) => hide.mutate(item)} isFiltered={isFiltered} />
         </div>
         {lastHidden && (
           <div className="discovery-toast" role="status">

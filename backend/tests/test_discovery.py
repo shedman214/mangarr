@@ -247,3 +247,27 @@ async def test_one_read_cannot_fill_the_top_of_the_list(session, monkeypatch):
     titles = [i.title for i in (await discovery.recommendations(session)).items]
     assert titles[:6] == ["Big 0", "Big 1", "Big 2", "Big 3", "Big 4", "Other pick"]
     assert titles[6:] == ["Big 5", "Big 6", "Big 7"]
+
+
+async def test_all_twelve_seeds_fit_in_one_anilist_page(monkeypatch):
+    seen = {}
+
+    async def query(query, variables):
+        seen["query"] = query
+        return {"Page": {"media": []}}
+    monkeypatch.setattr(discovery.anilist, "_query", query)
+    await discovery.anilist.discovery_recommendations(list(range(1, discovery.SEED_LIMIT + 1)), 1)
+    import re
+    per_page = int(re.search(r"Page\(perPage: (\d+)\)", seen["query"]).group(1))
+    assert per_page >= discovery.SEED_LIMIT
+
+
+async def test_a_linked_read_whose_title_normalizes_to_nothing_still_counts(session, monkeypatch):
+    await kavita_settings(session)
+    reads = [entry("進撃の巨人", anilist_id=53390, pages_read=100)]
+    monkeypatch.setattr(discovery.kavita.KavitaClient, "reading_profile", AsyncMock(return_value=reads))
+    provider = AsyncMock(return_value=({53390: [{"rating": 9, "mediaRecommendation": media(70, "Follow-up")}]}, False))
+    monkeypatch.setattr(discovery.anilist, "discovery_recommendations", provider)
+    result = await discovery.recommendations(session)
+    assert result.state == "ready" and [i.title for i in result.items] == ["Follow-up"]
+

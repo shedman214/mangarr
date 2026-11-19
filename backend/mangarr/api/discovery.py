@@ -1,6 +1,7 @@
 """New series and recommendations outside the Mangarr library."""
 
 import asyncio
+import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
@@ -8,6 +9,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import kavita, settings_service
@@ -16,6 +18,8 @@ from ..db import get_session
 from ..metadata.anilist import provider as anilist
 from ..models import DiscoveryHidden, Series
 from ..util import normalize_title
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/discovery", tags=["discovery"])
 
@@ -205,8 +209,8 @@ async def _kavita_reads(client: kavita.KavitaClient) -> list[kavita.ReadEntry]:
     try:
         if reads := await client.reading_profile():
             return reads
-    except kavita.KavitaError:
-        pass
+    except kavita.KavitaError as exc:
+        log.info("Kavita series list unavailable (%s); using reading history titles", exc)
     return [kavita.ReadEntry(name=name) for name in await client.recently_read_titles()]
 
 
@@ -226,7 +230,10 @@ async def recommendations(session: AsyncSession = Depends(get_session)):
 
     reads: dict[str, kavita.ReadEntry] = {}
     for entry in history:
-        if key := normalize_title(entry.name):
+        # a title that normalizes to nothing (e.g. all Japanese) still counts when Kavita
+        # links it to AniList
+        key = normalize_title(entry.name) or (f"anilist:{entry.anilist_id}" if entry.anilist_id else "")
+        if key:
             reads.setdefault(key, entry)  # most recent first
     if not reads:
         return DiscoveryRecommendations(items=[], state="no_history")
@@ -288,11 +295,13 @@ async def hidden_titles(session: AsyncSession = Depends(get_session)):
 @router.post("/hidden", status_code=204)
 async def hide_title(body: HiddenIn, session: AsyncSession = Depends(get_session)):
     """Discovery's "Not interested": the title is never suggested again until unhidden."""
-    anilist_id = int(body.provider_id)
-    row = await session.get(DiscoveryHidden, anilist_id)
-    if row is None:
-        session.add(DiscoveryHidden(anilist_id=anilist_id, title=body.title.strip()))
-        await session.commit()
+    # atomic and idempotent: a repeated or concurrent hide of the same title is a no-op
+    await session.execute(
+        sqlite_insert(DiscoveryHidden)
+        .values(anilist_id=int(body.provider_id), title=body.title.strip())
+        .on_conflict_do_nothing(index_elements=["anilist_id"])
+    )
+    await session.commit()
     return Response(status_code=204)
 
 

@@ -186,3 +186,30 @@ test("Not interested hides a title, Undo brings it back, Manage can unhide", asy
   await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/discovery/hidden/100")).toBe(true));
   expect(await screen.findByRole("link", { name: /New title details/ })).toBeInTheDocument();
 });
+
+test("a list answer that still contains a hidden title does not bring it back", async () => {
+  // the server's hidden list is authoritative even when a list response predates the hide
+  fakeApi((_, path) => {
+    if (path === "/discovery/hidden") return { body: [{ provider_id: "100", title: "New title", hidden_at: "2026-11-19T00:00:00Z" }] };
+    if (path === "/discovery/releases") return { body: [release, { ...release, provider_id: "101", title: "Other title" }] };
+    if (path === "/discovery/recommendations") return { body: { state: "ready", items: [] } };
+  });
+  renderWithClient(<Discovery />);
+  expect(await screen.findByText("Other title")).toBeInTheDocument();
+  await screen.findByRole("button", { name: "1 hidden · Manage" });
+  expect(screen.queryByText("New title")).toBeNull();
+});
+
+test("a failed hidden-list request says so and can be retried", async () => {
+  let failing = true;
+  fakeApi((_, path) => {
+    if (path === "/discovery/hidden") return failing ? { status: 500, body: { detail: "boom" } } : { body: [] };
+    if (path === "/discovery/releases") return { body: [release] };
+    if (path === "/discovery/recommendations") return { body: { state: "ready", items: [] } };
+  });
+  renderWithClient(<Discovery />);
+  expect(await screen.findByText(/Couldn’t load hidden titles/)).toBeInTheDocument();
+  failing = false;
+  await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await waitFor(() => expect(screen.queryByText(/Couldn’t load hidden titles/)).toBeNull());
+});

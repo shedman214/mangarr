@@ -3298,11 +3298,27 @@ kbd {
   border-bottom: 1px solid var(--border);
 }
 
+.discovery-hidden-error {
+  color: var(--danger);
+}
+
 @media (max-width: 768px) {
   .discovery-hide,
   .discovery-filters .btn,
   .discovery-filter select {
     min-height: 44px;
+  }
+
+  /* phones: the buttons go on their own line under the title, so the title keeps the width */
+  .discovery-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .discovery-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: flex-end;
+    flex-wrap: wrap;
   }
 
   .discovery-toast {
