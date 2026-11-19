@@ -1,9 +1,20 @@
 name: Build and publish test image
 
+# Pushes to main publish :test (what the Unraid template uses) and :sha-<commit>.
+# A published GitHub Release publishes :<release tag> (e.g. :v2026.11.18) and :sha-<commit>
+# for the released commit, and never moves :test. Running this workflow by hand with a
+# release tag does the same for an existing release (e.g. after its tag was moved).
 on:
   push:
     branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to publish as an image (vYYYY.MM.DD); empty = :test from this branch"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -13,17 +24,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # One exact commit for everything below: the release tag's commit, or the pushed commit.
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # release inputs only ever resolve as tags, never as a same-named branch
+          ref: ${{ (github.event.release.tag_name || inputs.release_tag) && format('refs/tags/{0}', github.event.release.tag_name || inputs.release_tag) || github.sha }}
+      - id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   verify:
+    needs: resolve
     uses: ./.github/workflows/tests.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
 
   image:
-    needs: verify
+    needs: [resolve, verify]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
       - uses: docker/setup-buildx-action@v3
       - name: Image tags
         id: tags
@@ -31,7 +60,21 @@ jobs:
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
           echo "image=$image" >> "$GITHUB_OUTPUT"
-          echo "pinned=$image:sha-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          # the checked-out commit (a release tag's commit, not the branch the run started from)
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "pinned=$image:sha-$sha" >> "$GITHUB_OUTPUT"
+          if [ -n "$RELEASE_TAG" ]; then
+            if ! [[ "$RELEASE_TAG" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}$ ]]; then
+              echo "Release tag '$RELEASE_TAG' is not a version tag (vYYYY.MM.DD)" >&2
+              exit 1
+            fi
+            echo "moving=$image:$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "moving=$image:test" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
       - name: Build test image
         uses: docker/build-push-action@v6
         with:
@@ -40,11 +83,11 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: |
-            ${{ steps.tags.outputs.image }}:test
+            ${{ steps.tags.outputs.moving }}
             ${{ steps.tags.outputs.pinned }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.tags.outputs.sha }}
             org.opencontainers.image.description=Mangarr test build with source URL linking, Toonily download checks, and media permission controls
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -76,6 +119,6 @@ jobs:
       - name: Publish verified test image
         run: |
           docker push "${{ steps.tags.outputs.pinned }}"
-          docker push "${{ steps.tags.outputs.image }}:test"
-          echo 'Test image: `${{ steps.tags.outputs.pinned }}`' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Moving tag: `${{ steps.tags.outputs.image }}:test`' >> "$GITHUB_STEP_SUMMARY"
+          docker push "${{ steps.tags.outputs.moving }}"
+          echo 'Pinned image: `${{ steps.tags.outputs.pinned }}`' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Tag: `${{ steps.tags.outputs.moving }}`' >> "$GITHUB_STEP_SUMMARY"

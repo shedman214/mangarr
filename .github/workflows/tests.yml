@@ -2,6 +2,12 @@ name: Tests
 
 on:
   workflow_call:
+    inputs:
+      ref:
+        description: "Exact commit to test (the image workflow passes the commit it publishes)"
+        type: string
+        required: false
+        default: ""
   pull_request:
   push:
     branches:
@@ -22,6 +28,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -44,6 +52,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       # vite 8 / rolldown require Node ^20.19 || >=22.12
       - name: Set up Node

@@ -538,7 +538,13 @@ this backup fails, Mangarr stops before changing the database and logs the reaso
 fix the cause (usually free space or permissions on `/config`) and start it again.
 `MANGARR_PREMIGRATION_BACKUP=false` skips the backup and lets the upgrade run
 without it, which is not recommended. A pre-upgrade backup can be restored on the
-same version through Settings; startup then upgrades it again.
+same version through Settings; startup then upgrades it again. Backups from an
+earlier Mangarr version can be restored the same way (startup upgrades the database);
+backups from a newer version are refused.
+
+Releases use date-based versions (`vYYYY.MM.DD`). Publishing a GitHub Release builds
+and tests that commit and publishes `ghcr.io/shedman214/mangarr:<release tag>`;
+`:test` keeps following `main`.
 
 
 ## Additional experimental sources
