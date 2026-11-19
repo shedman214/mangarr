@@ -250,6 +250,8 @@ export default function Discovery() {
     () => [...new Set(all.map((item) => item.status).filter((status) => status !== "unknown"))].sort(),
     [all],
   );
+  // "nothing matches these filters" only where there were results to filter; a setup
+  // message (connect Kavita, no history, …) stays as it is
   const isFiltered = filters.type !== "" || filters.genre !== "" || filters.status !== "";
   const filterKey = `${filters.type}|${filters.genre}|${filters.status}`;
   const hiddenIds = new Set([...(hidden.data ?? []).map((row) => row.provider_id), ...justHidden]);
@@ -291,13 +293,15 @@ export default function Discovery() {
             description="Manga debuting this month"
             items={shownReleases} pending={releases.isPending} error={releases.error}
             retry={() => void releases.refetch()} empty="No new releases outside your library found this month."
-            onAdd={setAdding} onHide={(item) => hide.mutate(item)} isFiltered={isFiltered} />
+            onAdd={setAdding} onHide={(item) => hide.mutate(item)}
+            isFiltered={isFiltered && (releases.data?.length ?? 0) > 0} />
           <DiscoveryPanel key={`picks-${filterKey}`} id="picked-for-you" title="Picked for you"
             description="Based on what you read in Kavita"
             items={shownPicks} pending={recommendations.isPending} error={recommendations.error}
             retry={() => void recommendations.refetch()}
             empty={recommendationEmpty[recommendations.data?.state ?? "ready"]}
-            onAdd={setAdding} onHide={(item) => hide.mutate(item)} isFiltered={isFiltered} />
+            onAdd={setAdding} onHide={(item) => hide.mutate(item)}
+            isFiltered={isFiltered && (recommendations.data?.items.length ?? 0) > 0} />
         </div>
         {lastHidden && (
           <div className="discovery-toast" role="status">

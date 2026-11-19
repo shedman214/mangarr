@@ -213,3 +213,19 @@ test("a failed hidden-list request says so and can be retried", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Retry" }));
   await waitFor(() => expect(screen.queryByText(/Couldn’t load hidden titles/)).toBeNull());
 });
+
+test("filtering releases keeps the connect-Kavita message in Picked for you", async () => {
+  fakeApi((_, path) => {
+    if (path === "/discovery/hidden") return { body: [] };
+    if (path === "/discovery/releases") return { body: [{ ...release, country: "KR" }] };
+    if (path === "/discovery/recommendations") return { body: { state: "needs_kavita", items: [] } };
+  });
+  renderWithClient(<Discovery />);
+  await screen.findByText("New title");
+  await userEvent.selectOptions(screen.getByLabelText("Type"), "Manga");
+  const picks = screen.getByRole("region", { name: "Picked for you" });
+  expect(within(picks).getByRole("link", { name: "Settings" })).toBeInTheDocument();
+  expect(within(picks).queryByText("Nothing here matches these filters.")).toBeNull();
+  const releases = screen.getByRole("region", { name: "New releases" });
+  expect(within(releases).getByText("Nothing here matches these filters.")).toBeInTheDocument();
+});
