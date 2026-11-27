@@ -14,7 +14,7 @@ test("an existing search result opens its local series even without configured r
     description: "", in_library: true, in_library_series_id: 42,
   }] } : undefined);
   renderWithClient(<><AddSeries /><Location /></>);
-  await userEvent.type(screen.getByPlaceholderText(/Search MangaUpdates/), "Example");
+  await userEvent.type(screen.getByPlaceholderText(/Search by title/), "Example");
   await userEvent.click(screen.getByRole("button", { name: "Search" }));
   const result = await screen.findByRole("link", { name: "Open Example" });
   result.focus();

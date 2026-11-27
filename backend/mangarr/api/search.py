@@ -13,6 +13,7 @@ from ..automation import select_for_series
 from ..db import get_session
 from ..metadata.anilist import provider as anilist
 from ..metadata.mangabaka import provider as mangabaka
+from ..metadata import id_lookup
 from ..metadata.mangaupdates import provider as mangaupdates
 from ..models import Chapter, Series
 from ..schemas import MetadataResult, ReleaseOut
@@ -68,8 +69,14 @@ async def metadata_results(
     if provider not in columns:
         raise HTTPException(422, f"Unknown metadata provider {provider!r}")
     meta_provider = {"anilist": anilist, "mangaupdates": mangaupdates, "mangabaka": mangabaka}[provider]
-    results = await meta_provider.search(query, limit=limit)
-    if include_mangabaka and provider == "mangaupdates":
+    # Add New Series: an id or link ("mangabaka:126821", an AniList link, …) names exactly one series
+    named = id_lookup.parse(query) if include_mangabaka else None
+    if named:
+        found = await id_lookup.resolve(*named)
+        results = [found] if found else []
+    else:
+        results = await meta_provider.search(query, limit=limit)
+    if include_mangabaka and provider == "mangaupdates" and not named:
         try:
             # supplementary: never hold MangaUpdates' results up for long
             extra = await asyncio.wait_for(

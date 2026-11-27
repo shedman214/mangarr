@@ -211,6 +211,16 @@ class MangaBakaClient:
         record = await self._record(int(provider_id))
         return to_metadata(record) if record else None
 
+    async def record_by_id(self, mangabaka_id: int) -> dict | None:
+        """The MangaBaka series record (a merged entry gives the one that replaced it), or None."""
+        return await self._record(mangabaka_id)
+
+    async def record_by_source(self, site: str, source_id: int | str) -> dict | None:
+        """The MangaBaka series another site's id belongs to: site is "anilist", "mal" or
+        "mangaupdates" (MangaUpdates' base-36 key, as in its links)."""
+        path = {"anilist": "anilist", "mal": "my-anime-list", "mangaupdates": "manga-updates"}[site]
+        return await self._by_source(f"/source/{path}/{source_id}")
+
     async def _record(self, mangabaka_id: int) -> dict | None:
         record = await self._get(f"/series/{int(mangabaka_id)}")
         if record and record.get("state") not in (None, "active") and record.get("merged_with"):

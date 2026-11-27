@@ -31,6 +31,9 @@ export function AddTabs() {
   );
 }
 
+/** Id searches the server resolves to one series (metadata/id_lookup.py). */
+const ID_EXAMPLES = ["mangabaka:1331", "anilist:159441", "mal:20593", "mangaupdates:gnv09ie"];
+
 export default function AddSeries() {
   const navigate = useNavigate();
   // ?q= starts a search right away (the command palette's "search MangaUpdates")
@@ -77,7 +80,8 @@ export default function AddSeries() {
           <input
             autoFocus
             style={{ flex: 1 }}
-            placeholder="Search MangaUpdates (and MangaBaka) for a manga title…"
+            placeholder="Search by title, an id like mangabaka:1331, or paste a link…"
+            aria-describedby="add-search-hints"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -85,6 +89,17 @@ export default function AddSeries() {
             Search
           </button>
         </form>
+
+        <p className="add-search-hints dim" id="add-search-hints">
+          Try{" "}
+          {ID_EXAMPLES.map((example) => (
+            <button type="button" className="tag add-search-example" key={example}
+              onClick={() => { setQuery(example); setSubmitted(example); }}>
+              {example}
+            </button>
+          ))}{" "}
+          — or paste a MangaBaka, AniList, MyAnimeList or MangaUpdates link.
+        </p>
 
         {rootFolders && rootFolders.length === 0 && (
           <div className="error-banner">

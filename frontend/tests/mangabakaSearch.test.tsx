@@ -24,7 +24,7 @@ test("a MangaBaka result is labelled and added by its MangaBaka id", async () =>
     return undefined;
   });
   renderWithClient(<AddSeries />);
-  await userEvent.type(screen.getByPlaceholderText(/Search MangaUpdates \(and MangaBaka\)/), "Dungeon Crawler Carl");
+  await userEvent.type(screen.getByPlaceholderText(/Search by title, an id like mangabaka:1331/), "Dungeon Crawler Carl");
   await userEvent.click(screen.getByRole("button", { name: "Search" }));
   expect(await screen.findByText("Dungeon Crawler Carl")).toBeInTheDocument();
   expect(screen.getByText("Ka'er Huaite")).toBeInTheDocument();

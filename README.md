@@ -22,7 +22,9 @@ design; it is the automation half of your manga stack.
   (covers, descriptions, status; AniList remains available as a fallback
   provider; the search also lists MangaBaka entries neither of them has, such
   as western comics and webtoons, which then take their details from
-  MangaBaka), poster-grid library, per-series chapter tables with monitor
+  MangaBaka; an id such as `mangabaka:1331`, `anilist:159441`, `mal:20593` or
+  `mangaupdates:gnv09ie`, or a pasted link from those sites, finds exactly that
+  series), poster-grid library, per-series chapter tables with monitor
   toggles, wanted/missing view. MangaUpdates tracks scanlation releases per
   chapter, so chapter/volume counts stay current for ongoing series where
   AniList lags, and its release feed fills in chapters no direct source
