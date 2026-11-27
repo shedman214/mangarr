@@ -3327,3 +3327,31 @@ kbd {
     bottom: calc(var(--bottom-nav-height) + 16px);
   }
 }
+
+/* ---------- add new series: id / link search hints ---------- */
+.add-search-hints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 640px;
+  margin: -14px 0 22px;
+  font-size: 0.85rem;
+}
+
+.add-search-example {
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--bg-raised);
+}
+
+.add-search-example:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+@media (max-width: 768px) {
+  .add-search-example {
+    min-height: 44px;
+  }
+}
